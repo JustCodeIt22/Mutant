@@ -1,0 +1,33 @@
+import pygame, sys
+from TextEditor import *
+
+pygame.init()
+
+clock = pygame.time.Clock()
+dispInfo = pygame.display.Info()
+SCREEN_WIDTH = 800 #dispInfo.current_w
+SCREEN_HEIGHT = 600 #dispInfo.current_h
+screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+texteditor = TextEditor((0, 0), (SCREEN_WIDTH, SCREEN_HEIGHT), cursor_style="filled_box")
+
+running = True
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.display.quit()
+            pygame.quit()
+            running = False
+            sys.exit()
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_q:
+                pygame.display.quit()
+                pygame.quit()
+                running = False
+                sys.exit()
+        texteditor.handle_events(event)
+    
+    screen.fill((255, 255, 255))
+
+    texteditor.draw()
+    pygame.display.update()
+    clock.tick(60)
