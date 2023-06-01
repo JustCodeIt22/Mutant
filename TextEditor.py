@@ -51,8 +51,11 @@ class TextEditor:
         self.cursor_surf_rect = self.cursor_surf.get_rect(topleft=(self.cursor_posx , self.font_size[1]))
 
         # === helper variables
-        # var for ctrl btn pressed
+        # var for ctrl and shift btn pressed for various shortcuts and key bindings
         self.ctrl = False
+        self.shift = False
+        self.curr_row = 0
+        self.curr_col = 0
 
         # var for backspacehold 
         self.isBackspaceHold = False
@@ -68,6 +71,14 @@ class TextEditor:
         self.overflow = 0
         self.hscroll_num = 0
 
+        # selection
+        self.selection_start_col = 0
+        self.selected_col = 0
+        self.selected_row = 0
+        self.selection_dir = 0 # selection direction
+
+
+
     # Handle Events
     def handle_events(self, event):
         # Keyboard events
@@ -76,26 +87,40 @@ class TextEditor:
             if event.key == pygame.K_BACKSPACE:
                 self.isBackspaceHold = True
                 if self.text[self.line_num] or self.text[self.line_num - 1] or self.text[self.line_num - 1] == "":
-                    if (self.text[self.line_num - 1] or self.text[self.line_num - 1] == "") and self.text[self.line_num] == "":
+                    # print(self.curr_row, self.curr_col)
+                    # if (self.text[self.line_num - 1] or self.text[self.line_num - 1] == "") and self.text[self.line_num] == "":
+                    #     print("before line")
+                    #     if self.line_num > 0:
+                    #         self.cursor_surf_rect.y = self.font_size[1] * (self.line_num)
+                    #         self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
+                    #         self.line_num -= 1
+                    #         self.text.pop(self.line_num + 1)
+                    # else:
+                    if self.text[self.line_num] and self.curr_col != 0:
+                        self.cursor_surf_rect.x -= self.font_size[0]
+                        self.delete_text()
+                    else:
                         if self.line_num > 0:
                             self.cursor_surf_rect.y = self.font_size[1] * (self.line_num)
-                            #self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.font_size[0]
                             self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
+                            self.text[self.line_num] = self.text[self.line_num - 1] + self.text[self.line_num] 
                             self.line_num -= 1
-                            self.text.pop(-1)
-                    else:
-                        self.cursor_surf_rect.x -= self.font_size[0]
-                        self.text[self.line_num] = self.text[self.line_num][:-1]   
+                            self.text.pop(self.line_num)
+                    self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
+
             # Enter 
             elif event.key == pygame.K_RETURN:
                 self.cursor_surf_rect.y += self.font_size[1]
                 self.cursor_surf_rect.x = self.cursor_posx
-                self.text.append("")
+                # self.text.append("")
+                self.text.insert(self.line_num + 1, self.text[self.line_num][self.curr_col:])
+                self.text[self.line_num] = self.text[self.line_num][:self.curr_col]
                 self.line_num += 1
                 self.scroll_window() # scroll window downwards if the cursor is at end of screen
+                self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
             # Shifts
             elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
-                pass
+                self.shift = True
             elif event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL:
                 self.ctrl = True
             elif event.key == pygame.K_LALT or event.key == pygame.K_RALT:
@@ -111,45 +136,72 @@ class TextEditor:
             # Motion Keys (i.e Left, Right, Up, Down)
             # Right Key
             elif event.key == pygame.K_RIGHT:
+                # Motion
                 self.update_cursor_according_to_keys(horizontalDir = 1)
+                # Selection
+                if self.shift:
+                    self.selection_dir = 1
+                    self.selected_col += 1
+                    self.get_selection()
+                self.insert_text()
             # Left Key
             elif event.key == pygame.K_LEFT:
+                # Motion
                 self.update_cursor_according_to_keys(horizontalDir = -1)
+                # Selection
+                if self.shift:
+                    self.selection_dir = -1
+                    self.selected_col += 1
+                    self.get_selection()
+                self.insert_text()
             # Down Key
             elif event.key == pygame.K_DOWN:
                 self.update_cursor_according_to_keys(verticalDir = 1)
                 self.cursor_scroll = 1
                 self.scroll_window() # scroll window downwards if the cursor is at end of screen
-                print(self.line_num + 1)
+                self.insert_text()
             # Up Key
             elif event.key == pygame.K_UP:
                 self.update_cursor_according_to_keys(verticalDir = -1)
-                print(self.line_num + 1)
                 if(self.cursor_surf_rect.topleft[1] <= self.font_size[1] and self.line_num != 0):
                     self.cursor_scroll = 0
                     self.vscroll_num -= 1
                     self.line_num -= 1 
-                    print(self.line_num)
                 self.scroll_window() # scroll window upwards if the cursor is at top of screen and if there are lines up
+                self.insert_text()
 
             # Other keys
             else:
                 self.cursor_surf_rect.x += self.font_size[0]
-                self.text[self.line_num] += event.unicode
+                # insertion
+                self.insert_text(event.unicode)
+                
+
         # Keyboard Keyup Events 
         if event.type == pygame.KEYUP:
             # Backspace
             if event.key == pygame.K_BACKSPACE:
                 self.isBackspaceHold = False
+            # Ctrl
             elif event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL:
                 self.ctrl = False
+            # Shifts
+            elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
+                self.shift = False
+                self.selection_start_col = 0
 
         # Mouse Events
         if event.type == pygame.MOUSEBUTTONDOWN:
             if event.button == 1:
                 self.update_cursor_according_to_mouse()
 
+
+    # Get the current column and row
+    def get_row_n_col(self, relative_pos):
+        self.curr_col = round(relative_pos[0] / self.font_size[0]) - 4
+        self.curr_row = round(relative_pos[1] / self.font_size[1])
         
+
     # Backspace Hold -> # if user holds space for 20ms or more then it should delete chars faster   
     def backspace_hold(self):
         if self.isBackspaceHold and self.backspaceHoldTimer > 0:
@@ -163,6 +215,7 @@ class TextEditor:
                 self.cursor_surf_rect.x -= self.font_size[0]
                 self.text[self.line_num] = self.text[self.line_num][:-1]
     
+
     # cursor_type 
     def set_cursor_style(self, cursor_style):
         if cursor_style == "filled_box":
@@ -170,6 +223,7 @@ class TextEditor:
         elif cursor_style == "bar":
             self.cursor_surf = pygame.Surface((4,self.font_size[1] + 2))
     
+
     # update cursor pos
     def update_cursor_according_to_mouse(self):
         self.mouse_pos = pygame.mouse.get_pos()
@@ -179,6 +233,7 @@ class TextEditor:
         self.cursor_surf_rect.y = row * self.font_size[1]
         self.line_num = row - 1
         print(row, col)
+
 
     # update cursor pos according to up/down/left/right keys
     def update_cursor_according_to_keys(self, horizontalDir = 0, verticalDir = 0):
@@ -196,6 +251,7 @@ class TextEditor:
                 self.cursor_surf_rect.x = self.font.size(self.text[self.line_num])[0] + self.cursor_posx
                 self.cursor_surf_rect.y += (verticalDir * self.font_size[1])
 
+
     # scroll
     def scroll_window(self):
         pos = self.cursor_surf_rect.bottomleft
@@ -203,12 +259,14 @@ class TextEditor:
             self.cursor_surf_rect.y -= (self.vertical_scroll * self.cursor_scroll) 
             self.vscroll_num += 1
     
+
     # horizontal scroll
     def scroll_horizontal_horizontal(self):
         pos = self.cursor_surf_rect.right
         if(pos >= self.te_size[0]): # cnv_to_per(90, self.te_size[0])
             self.cursor_surf_rect.x -= self.horizontal_scroll
             self.hscroll_num += 1
+
 
     # Save file
     def save_file(self):
@@ -234,9 +292,38 @@ class TextEditor:
 
 
     # =================== Selection ===========
-    def draw_selection(self):
-        pass
+    def get_selection(self):
+        if not self.selection_start_col:
+            self.selection_start_col = round(self.cursor_surf_rect.topleft[0] / self.font_size[0]) - 4
+        if self.selection_dir == 1:
+            print(self.text[self.line_num][self.selection_start_col - 1:self.selection_start_col + self.selected_col])
+            print("selection from left to right")
+        elif self.selection_dir == -1:
+            print(self.text[self.line_num][self.selection_start_col - self.selected_col:self.selection_start_col])
+            print("selection from right to left")
+        print(self.selection_start_col)
+    
+    # =================== Insertion ============
+    def insert_text(self, text = ""):
+        self.get_row_n_col(self.cursor_surf_rect.topleft)
+        if self.curr_col != len(self.text[self.line_num]) - 1:
+            txt_list = list(self.text[self.line_num])
+            txt_list.insert(self.curr_col - 1, text)
+            join_txt = "".join(txt_list)
+            self.text[self.line_num] = join_txt
+        else:
+            self.text[self.line_num] += text
 
+    # ================ Deletion ==============
+    def delete_text(self):
+        self.get_row_n_col(self.cursor_surf_rect.topleft)
+        if self.curr_col != len(self.text[self.line_num]) - 1:
+            txt_list = list(self.text[self.line_num])
+            txt_list.pop(self.curr_col)
+            join_txt = "".join(txt_list)
+            self.text[self.line_num] = join_txt
+        else:
+            self.text[self.line_num] = self.text[self.line_num][:-1]
 
     # Draw 
     def draw(self):
@@ -253,6 +340,9 @@ class TextEditor:
         # Scroll
         # self.scroll_window()
         self.scroll_horizontal_horizontal()
+
+        # Selection 
+        # self.get_selection()
         
         # display the text
         for ln, text in enumerate(self.text):
@@ -272,6 +362,3 @@ class TextEditor:
 
         # Draw cursor
         self.te_surf.blit(self.cursor_surf, self.cursor_surf_rect)
-        
-       
-    
