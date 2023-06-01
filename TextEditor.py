@@ -25,6 +25,7 @@ class TextEditor:
         self.te_pos = pos
         self.te_size = size
         self.te_surf = pygame.Surface(self.te_size)
+        self.file_path = ""
 
         # colors
         self.bg_color = bg_color
@@ -71,53 +72,72 @@ class TextEditor:
         self.overflow = 0
         self.hscroll_num = 0
 
-        # selection
+        # var for selection
         self.selection_start_col = 0
         self.selected_col = 0
         self.selected_row = 0
         self.selection_dir = 0 # selection direction
 
-
+        # var for popup window
+        self.win_is_open = False
+        self.toSave = False # for if to save a file or not
+        self.toOpen = False # for if to open a file or not
 
     # Handle Events
     def handle_events(self, event):
         # Keyboard events
         if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_ESCAPE:
+                self.file_path = ""
+                self.win_is_open = False
+                self.toSave = False
+                self.toOpen = False
             # Backspace
-            if event.key == pygame.K_BACKSPACE:
-                self.isBackspaceHold = True
-                if self.text[self.line_num] or self.text[self.line_num - 1] or self.text[self.line_num - 1] == "":
-                    # print(self.curr_row, self.curr_col)
-                    # if (self.text[self.line_num - 1] or self.text[self.line_num - 1] == "") and self.text[self.line_num] == "":
-                    #     print("before line")
-                    #     if self.line_num > 0:
-                    #         self.cursor_surf_rect.y = self.font_size[1] * (self.line_num)
-                    #         self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
-                    #         self.line_num -= 1
-                    #         self.text.pop(self.line_num + 1)
-                    # else:
-                    if self.text[self.line_num] and self.curr_col != 0:
-                        self.cursor_surf_rect.x -= self.font_size[0]
-                        self.delete_text()
-                    else:
-                        if self.line_num > 0:
-                            self.cursor_surf_rect.y = self.font_size[1] * (self.line_num)
-                            self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
-                            self.text[self.line_num] = self.text[self.line_num - 1] + self.text[self.line_num] 
-                            self.line_num -= 1
-                            self.text.pop(self.line_num)
-                    self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
+            elif event.key == pygame.K_BACKSPACE:
+                if self.win_is_open:
+                    self.file_path = self.file_path[:-1]
+                else:
+                    self.isBackspaceHold = True
+                    if self.text[self.line_num] or self.text[self.line_num - 1] or self.text[self.line_num - 1] == "":
+                        # print(self.curr_row, self.curr_col)
+                        # if (self.text[self.line_num - 1] or self.text[self.line_num - 1] == "") and self.text[self.line_num] == "":
+                        #     print("before line")
+                        #     if self.line_num > 0:
+                        #         self.cursor_surf_rect.y = self.font_size[1] * (self.line_num)
+                        #         self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
+                        #         self.line_num -= 1
+                        #         self.text.pop(self.line_num + 1)
+                        # else:
+                        if self.text[self.line_num] and self.curr_col != 0:
+                            self.cursor_surf_rect.x -= self.font_size[0]
+                            self.delete_text()
+                        else:
+                            if self.line_num > 0:
+                                self.cursor_surf_rect.y = self.font_size[1] * (self.line_num)
+                                self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
+                                self.text[self.line_num] = self.text[self.line_num - 1] + self.text[self.line_num] 
+                                self.line_num -= 1
+                                self.text.pop(self.line_num)
+                        self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
 
             # Enter 
             elif event.key == pygame.K_RETURN:
-                self.cursor_surf_rect.y += self.font_size[1]
-                self.cursor_surf_rect.x = self.cursor_posx
-                # self.text.append("")
-                self.text.insert(self.line_num + 1, self.text[self.line_num][self.curr_col:])
-                self.text[self.line_num] = self.text[self.line_num][:self.curr_col]
-                self.line_num += 1
-                self.scroll_window() # scroll window downwards if the cursor is at end of screen
-                self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
+                if self.win_is_open:
+                    if self.toSave : self.save_file()
+                    elif self.toOpen : self.open_file()
+                    self.win_is_open = False
+                    self.toSave = False
+                    self.toOpen = False
+                else:
+                    self.cursor_surf_rect.y += self.font_size[1]
+                    self.cursor_surf_rect.x = self.cursor_posx
+                    # self.text.append("")
+                    self.text.insert(self.line_num + 1, self.text[self.line_num][self.curr_col:])
+                    self.text[self.line_num] = self.text[self.line_num][:self.curr_col]
+                    self.line_num += 1
+                    self.scroll_window() # scroll window downwards if the cursor is at end of screen
+                    self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
+                
             # Shifts
             elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
                 self.shift = True
@@ -126,9 +146,13 @@ class TextEditor:
             elif event.key == pygame.K_LALT or event.key == pygame.K_RALT:
                 pass
             elif self.ctrl and event.key == pygame.K_s: #  CTRL + s -> for saving file
-                self.save_file()
+                self.win_is_open = True
+                self.toSave = True
+                # self.save_file()
             elif self.ctrl and event.key == pygame.K_o: #  CTRL + o -> for opening file
-                self.open_file()
+                self.win_is_open = True
+                self.toOpen = True
+                # self.open_file()
             # Tab
             elif event.key == pygame.K_TAB:
                 self.cursor_surf_rect.x += self.font_size[0] * self.TAB_SIZE
@@ -172,9 +196,12 @@ class TextEditor:
 
             # Other keys
             else:
-                self.cursor_surf_rect.x += self.font_size[0]
-                # insertion
-                self.insert_text(event.unicode)
+                if self.win_is_open:
+                    self.file_path += event.unicode
+                else:
+                    self.cursor_surf_rect.x += self.font_size[0]
+                    # insertion
+                    self.insert_text(event.unicode)
                 
 
         # Keyboard Keyup Events 
@@ -270,19 +297,14 @@ class TextEditor:
 
     # Save file
     def save_file(self):
-        file_path = input("Enter file path : ")
-        with open(file_path, "w") as file:
+        with open(self.file_path, "w") as file:
             file.write("\n".join(self.text))
             print("File Saved Successfully")
 
 
     # Open file
-    def open_file(self, fpath=None):
-        if fpath:
-            file_path = fpath
-        else:
-            file_path = input("Enter file path : ")
-        with open(file_path, "r") as file:
+    def open_file(self):
+        with open(self.file_path, "r") as file:
             txt = file.read()
             self.text = txt.split("\n")
             print("File Opened Successfully")
@@ -324,6 +346,15 @@ class TextEditor:
             self.text[self.line_num] = join_txt
         else:
             self.text[self.line_num] = self.text[self.line_num][:-1]
+    
+    # =============== Taking File path =============
+    def draw_popup_window(self):
+        if self.win_is_open:
+            popup_window_surf = pygame.image.load("bg_popup_window.png")
+            f = self.font.render(self.file_path, 1, (0, 0, 0))
+            self.te_surf.blit(popup_window_surf, (self.te_size[0]//2 - 200, self.te_size[1]//2 - 150//2))
+            self.te_surf.blit(f, (self.te_size[0]//2 - 200 + 36, self.te_size[1]//2 - 150//2 + 66))
+
 
     # Draw 
     def draw(self):
@@ -359,6 +390,8 @@ class TextEditor:
                 self.ln_txt_rect.x -= 10
             self.te_surf.blit(ln_text, self.ln_txt_rect)
         
+        # popup window for taking file path
+        self.draw_popup_window()
 
         # Draw cursor
         self.te_surf.blit(self.cursor_surf, self.cursor_surf_rect)
