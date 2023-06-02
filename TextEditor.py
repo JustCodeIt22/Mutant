@@ -224,10 +224,10 @@ class TextEditor:
                     self.update_cursor_according_to_mouse()
                 case 4: # Scroll Up
                     print("Scroll Up")
-                    self.cursor_surf_rect.y += self.font_size[1]
+                    # self.cursor_surf_rect.y += self.font_size[1]
                 case 5: # Scroll Down
                     print("Scroll Down")
-                    self.cursor_surf_rect.y -= self.font_size[1]
+                    # self.cursor_surf_rect.y -= self.font_size[1]
             
                 
 
@@ -267,17 +267,16 @@ class TextEditor:
         col = self.mouse_pos[0] // self.font_size[0]
         if row >= 1 and col >= 4:
             if (0 <= row - 1 < len(self.text)):
-                if col - 4 <= len(self.text[row - 1]):
+                if col - 4 <= len(self.text[row - 1 + self.vscroll_num]):
                     self.curr_col = col - 4
                     self.cursor_surf_rect.x = col * self.font_size[0] + 4
                     self.cursor_surf_rect.y = row * self.font_size[1]
-                    self.line_num = row - 1
+                    self.line_num = row - 1 + self.vscroll_num
                 else:
                     self.curr_col = col - 4
-                    self.line_num = row - 1
+                    self.line_num = row - 1 + self.vscroll_num
                     self.cursor_surf_rect.x = (len(self.text[self.line_num]) + 4) * self.font_size[0] + 4
-                    self.cursor_surf_rect.y = row * self.font_size[1]
-
+                    self.cursor_surf_rect.y = row * self.font_size[1] 
 
     # update cursor pos according to up/down/left/right keys
     def update_cursor_according_to_keys(self, horizontalDir = 0, verticalDir = 0):
