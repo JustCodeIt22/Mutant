@@ -13,7 +13,7 @@ def cnv_to_per(percent, of=100):
 
 class TextEditor:
     # Cslass Constructor
-    def __init__(self, pos, size, bg_color = DEFAULT_BG_COLOR, tab_size = 4, cursor_color = DEFAULT_CURSOR_COLOR, cursor_style="filled_box", font = "Consolas", font_size = 18, line_num_color = (255, 255, 0), line_bgrectcolor = (55, 55, 55)):
+    def __init__(self, pos, size, bg_color = DEFAULT_BG_COLOR, tab_size = 4, cursor_color = DEFAULT_CURSOR_COLOR, cursor_style="filled_box", font = "Consolas", font_size = 18, line_num_color = (170, 170, 0), line_bgrectcolor = (55, 55, 55)):
         # CONSTANTS
         self.MARGIN = 10
         self.TAB_SIZE = tab_size
@@ -60,7 +60,7 @@ class TextEditor:
 
         # var for backspacehold 
         self.isBackspaceHold = False
-        self.backspaceHoldTimer = 50    # 50 mili second
+        self.backspaceHoldTimer = 50  # 50 mili second
 
         # var for vertical scroll
         self.vertical_scroll = self.font_size[1] # 5 * self.font_size[1]
@@ -71,6 +71,9 @@ class TextEditor:
         self.horizontal_scroll = self.font_size[0]
         self.overflow = 0
         self.hscroll_num = 0
+
+        # var for mouse scroll
+        self.mscroll_num = 0
 
         # var for selection
         self.selection_start_col = 0
@@ -83,8 +86,17 @@ class TextEditor:
         self.toSave = False # for if to save a file or not
         self.toOpen = False # for if to open a file or not
 
+
+
     # Handle Events
     def handle_events(self, event):
+        # Drag and Drop files
+        if event.type == pygame.DROPFILE:
+            self.file_path = event.file
+            self.toOpen = True
+            if self.toOpen : self.open_file()
+            self.toOpen = False
+
         # Keyboard events
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_ESCAPE:
@@ -99,25 +111,20 @@ class TextEditor:
                 else:
                     self.isBackspaceHold = True
                     if self.text[self.line_num] or self.text[self.line_num - 1] or self.text[self.line_num - 1] == "":
-                        # print(self.curr_row, self.curr_col)
-                        # if (self.text[self.line_num - 1] or self.text[self.line_num - 1] == "") and self.text[self.line_num] == "":
-                        #     print("before line")
-                        #     if self.line_num > 0:
-                        #         self.cursor_surf_rect.y = self.font_size[1] * (self.line_num)
-                        #         self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
-                        #         self.line_num -= 1
-                        #         self.text.pop(self.line_num + 1)
-                        # else:
-                        if self.text[self.line_num] and self.curr_col != 0:
+                        if self.text[self.line_num] and self.curr_col != 0: # This is for char deletion
                             self.cursor_surf_rect.x -= self.font_size[0]
                             self.delete_text()
                         else:
-                            if self.line_num > 0:
-                                self.cursor_surf_rect.y = self.font_size[1] * (self.line_num)
+                            if self.line_num > 0: # This is for the line deletion when the cursor is at the start of the line 
+                                self.cursor_surf_rect.y = self.font_size[1] * (self.line_num - self.vscroll_num)
                                 self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
                                 self.text[self.line_num] = self.text[self.line_num - 1] + self.text[self.line_num] 
+                                self.text.pop(self.line_num - 1)
                                 self.line_num -= 1
-                                self.text.pop(self.line_num)
+                                if(self.cursor_surf_rect.topleft[1] <= self.font_size[1] and self.line_num > 0):
+                                    self.cursor_scroll = 0
+                                    self.vscroll_num -= 1
+                                # self.scroll_window() # scroll window upwards if the cursor is at top of screen and if there are lines up
                         self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
 
             # Enter 
@@ -145,14 +152,19 @@ class TextEditor:
                 self.ctrl = True
             elif event.key == pygame.K_LALT or event.key == pygame.K_RALT:
                 pass
+            elif event.key == pygame.K_CAPSLOCK:
+                pass 
             elif self.ctrl and event.key == pygame.K_s: #  CTRL + s -> for saving file
                 self.win_is_open = True
                 self.toSave = True
                 # self.save_file()
             elif self.ctrl and event.key == pygame.K_o: #  CTRL + o -> for opening file
+                self.file_path = ""    # reseting the file path
                 self.win_is_open = True
                 self.toOpen = True
                 # self.open_file()
+            elif self.ctrl and event.key == pygame.K_z:
+                print("Undo!")
             # Tab
             elif event.key == pygame.K_TAB:
                 self.cursor_surf_rect.x += self.font_size[0] * self.TAB_SIZE
@@ -203,7 +215,6 @@ class TextEditor:
                     # insertion
                     self.insert_text(event.unicode)
                 
-
         # Keyboard Keyup Events 
         if event.type == pygame.KEYUP:
             # Backspace
@@ -223,11 +234,15 @@ class TextEditor:
                 case 1: # Left Mouse Button
                     self.update_cursor_according_to_mouse()
                 case 4: # Scroll Up
-                    print("Scroll Up")
-                    # self.cursor_surf_rect.y += self.font_size[1]
+                    # print("Scroll Up")
+                    if self.mscroll_num > 0:
+                        self.mouse_scroll(-1)
+                        self.cursor_surf_rect.y += self.font_size[1]
                 case 5: # Scroll Down
-                    print("Scroll Down")
-                    # self.cursor_surf_rect.y -= self.font_size[1]
+                    if  ((self.te_size[1] - self.font_size[1])// self.font_size[1]) < len(self.text):
+                        self.mouse_scroll(1)
+                        # print("Scroll Down")
+                        self.cursor_surf_rect.y -= self.font_size[1]
             
                 
 
@@ -236,6 +251,7 @@ class TextEditor:
         self.curr_col = round(relative_pos[0] / self.font_size[0]) - 4
         self.curr_row = round(relative_pos[1] / self.font_size[1])
         
+
 
     # Backspace Hold -> # if user holds space for 20ms or more then it should delete chars faster   
     def backspace_hold(self):
@@ -251,6 +267,7 @@ class TextEditor:
                 self.text[self.line_num] = self.text[self.line_num][:-1]
     
 
+
     # cursor_type 
     def set_cursor_style(self, cursor_style):
         if cursor_style == "filled_box":
@@ -258,6 +275,7 @@ class TextEditor:
         elif cursor_style == "bar":
             self.cursor_surf = pygame.Surface((4,self.font_size[1] + 2))
     
+
 
     # update cursor pos according to mouse pos
     def update_cursor_according_to_mouse(self):
@@ -267,16 +285,18 @@ class TextEditor:
         col = self.mouse_pos[0] // self.font_size[0]
         if row >= 1 and col >= 4:
             if (0 <= row - 1 < len(self.text)):
-                if col - 4 <= len(self.text[row - 1 + self.vscroll_num]):
+                if col - 4 <= len(self.text[row - 1 + self.vscroll_num + self.mscroll_num]):
                     self.curr_col = col - 4
                     self.cursor_surf_rect.x = col * self.font_size[0] + 4
                     self.cursor_surf_rect.y = row * self.font_size[1]
-                    self.line_num = row - 1 + self.vscroll_num
+                    self.line_num = row - 1 + self.vscroll_num + self.mscroll_num
                 else:
                     self.curr_col = col - 4
-                    self.line_num = row - 1 + self.vscroll_num
+                    self.line_num = row - 1 + self.vscroll_num + self.mscroll_num
                     self.cursor_surf_rect.x = (len(self.text[self.line_num]) + 4) * self.font_size[0] + 4
                     self.cursor_surf_rect.y = row * self.font_size[1] 
+
+
 
     # update cursor pos according to up/down/left/right keys
     def update_cursor_according_to_keys(self, horizontalDir = 0, verticalDir = 0):
@@ -295,6 +315,7 @@ class TextEditor:
                 self.cursor_surf_rect.y += (verticalDir * self.font_size[1])
 
 
+
     # scroll
     def scroll_window(self):
         pos = self.cursor_surf_rect.bottomleft
@@ -302,6 +323,7 @@ class TextEditor:
             self.cursor_surf_rect.y -= (self.vertical_scroll * self.cursor_scroll) 
             self.vscroll_num += 1
     
+
 
     # horizontal scroll
     def scroll_horizontal_horizontal(self):
@@ -311,11 +333,18 @@ class TextEditor:
             self.hscroll_num += 1
 
 
+
+    def mouse_scroll(self, mscorll_dir):
+        self.mscroll_num += mscorll_dir
+        self.get_row_n_col(self.cursor_surf_rect)
+
+
     # Save file
     def save_file(self):
         with open(self.file_path, "w") as file:
             file.write("\n".join(self.text))
             print("File Saved Successfully")
+
 
 
     # Open file
@@ -327,6 +356,7 @@ class TextEditor:
             self.line_num = len(self.text) - 1
             self.cursor_surf_rect.x = self.font.size(self.text[-1])[0] + self.cursor_posx    
             self.cursor_surf_rect.y = self.font.size(self.text[-1])[1] * len(self.text)
+
 
 
     # =================== Selection ===========
@@ -341,6 +371,8 @@ class TextEditor:
             print("selection from right to left")
         print(self.selection_start_col)
     
+
+
     # =================== Insertion ============
     def insert_text(self, text = ""):
         self.get_row_n_col(self.cursor_surf_rect.topleft)
@@ -351,6 +383,8 @@ class TextEditor:
             self.text[self.line_num] = join_txt
         else:
             self.text[self.line_num] += text
+
+
 
     # ================ Deletion ==============
     def delete_text(self):
@@ -363,6 +397,8 @@ class TextEditor:
         else:
             self.text[self.line_num] = self.text[self.line_num][:-1]
     
+    
+
     # =============== Taking File path =============
     def draw_popup_window(self):
         if self.win_is_open:
@@ -370,6 +406,7 @@ class TextEditor:
             f = self.font.render(self.file_path, 1, (0, 0, 0))
             self.te_surf.blit(popup_window_surf, (self.te_size[0]//2 - 200, self.te_size[1]//2 - 150//2))
             self.te_surf.blit(f, (self.te_size[0]//2 - 200 + 36, self.te_size[1]//2 - 150//2 + 66))
+
 
 
     # Draw 
@@ -396,12 +433,12 @@ class TextEditor:
             txt = self.font.render(text, 1, self.fg_color)
             txt_posx = self.MARGIN + self.line_num_w + self.space_after_ln
             txt_posy = self.font_size[1] * (ln + 1)
-            self.txt_rect = txt.get_rect(topleft= (txt_posx - (self.horizontal_scroll * self.hscroll_num), txt_posy - (self.vertical_scroll * self.vscroll_num) ))
+            self.txt_rect = txt.get_rect(topleft= (txt_posx - (self.horizontal_scroll * self.hscroll_num), txt_posy - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num) ))
             self.te_surf.blit(txt, self.txt_rect)
 
             # Displaying the line numbers
             ln_text = self.font.render(str(ln + 1), 1, self.line_num_color)
-            self.ln_txt_rect = ln_text.get_rect(topright = (self.line_num_w - (self.horizontal_scroll * self.hscroll_num), self.font_size[1] * (ln + 1) - (self.vertical_scroll * self.vscroll_num)))
+            self.ln_txt_rect = ln_text.get_rect(topright = (self.line_num_w - (self.horizontal_scroll * self.hscroll_num), self.font_size[1] * (ln + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)))
             if(ln == self.line_num):
                 self.ln_txt_rect.x -= 10
             self.te_surf.blit(ln_text, self.ln_txt_rect)
