@@ -1,19 +1,15 @@
 import pygame
 from pygame.locals import *
+import os  # for accessing the directories and files
+from algorithms import *
 
 # COLORS
 DEFAULT_BG_COLOR = (11, 14, 20)
 DEFAULT_CURSOR_COLOR = (255, 255, 255)
 
-# helper function
-def cnv_to_per(percent, of=100):
-    result = percent/100 * of
-    return result
-
-
 class TextEditor:
-    # Cslass Constructor
-    def __init__(self, pos, size, bg_color = DEFAULT_BG_COLOR, tab_size = 4, cursor_color = DEFAULT_CURSOR_COLOR, cursor_style="filled_box", font = "Consolas", font_size = 18, line_num_color = (170, 170, 0), line_bgrectcolor = (55, 55, 55)):
+    # Class Constructor
+    def __init__(self, pos, size, bg_color = DEFAULT_BG_COLOR, tab_size = 4, cursor_color = DEFAULT_CURSOR_COLOR, cursor_style="filled_box", font = "Consolas", font_size = 18, line_num_color = (170, 170, 0), curr_ln_indi_color = (41, 46, 57) ,line_bgrectcolor = (55, 55, 55)):
         # CONSTANTS
         self.MARGIN = 10
         self.TAB_SIZE = tab_size
@@ -58,6 +54,13 @@ class TextEditor:
         self.curr_row = 0
         self.curr_col = 0
 
+        # current line indicator 
+        self.curr_ln_indi_color = curr_ln_indi_color
+        self.curr_ln_indi_surf = pygame.Surface((self.te_size[0], self.font_size[1]))
+        self.curr_ln_indi_surf.fill(self.curr_ln_indi_color)
+        self.curr_ln_indi_surf.set_alpha(100)
+        self.clis_rect = self.curr_ln_indi_surf.get_rect() # current line indicator rect
+
         # var for backspacehold 
         self.isBackspaceHold = False
         self.backspaceHoldTimer = 50  # 50 mili second
@@ -83,9 +86,30 @@ class TextEditor:
 
         # var for popup window
         self.win_is_open = False
+        self.relative_path = os.path.dirname(__file__)  # __file__ -> gives the relative path its changes according to the apps loc
+        self.popup_window_surf = pygame.image.load(self.relative_path + "\\bg_popup_window.png")
+
+        # var for saving and opening files
         self.toSave = False # for if to save a file or not
         self.toOpen = False # for if to open a file or not
 
+        # var for tabAutoCompleteFileNames
+        self.pwd = os.getcwd()
+        self.all_dirs = os.listdir(self.pwd)
+
+        # var for Syntax HighLighting
+        self.builtin_keywords_for_all_langs = {
+            "cpp" : ["int", "bool", "long", "short", "char", "string", "void", "if", "else if", "else", "cout", "cin", "for", "while", "return"],
+            "py" : ["import", "def", "print", "class", "for", "while", "if", "elif", "else", "return"],
+            "html": ["<html>", "</html>" ,"<body>", "</body>", "<head>", "</head>", "<p>", "</p>" , "</h1>", "<h2>" , "</h2>", "<h3>" , "</h3>", "<h4>" , "</h4>", "<h5>" , "</h5>", "<h6>" , "</h6>"]
+        }
+        self.builtin_keywords = []
+        self.builtin_keyword_color = (90, 245, 0)
+        self.comment_color = (103, 75, 110)
+        self.string_color = (245, 39, 91)
+        self.escape_char_color = (200, 0, 0)
+        # specifict for python self word
+        self.self_color = (42, 184, 245)
 
 
     # Handle Events
@@ -135,6 +159,13 @@ class TextEditor:
                     self.win_is_open = False
                     self.toSave = False
                     self.toOpen = False
+                    # load the syntax highlighting
+                    file_extension = self.file_path.split(".")[-1]
+                    if file_extension:
+                        try:
+                            self.builtin_keywords = self.builtin_keywords_for_all_langs[file_extension]
+                        except KeyError:
+                            print(f"Syntax Highlighting for {file_extension} is not implemented till now !!")
                 else:
                     self.cursor_surf_rect.y += self.font_size[1]
                     self.cursor_surf_rect.x = self.cursor_posx
@@ -167,8 +198,11 @@ class TextEditor:
                 print("Undo!")
             # Tab
             elif event.key == pygame.K_TAB:
-                self.cursor_surf_rect.x += self.font_size[0] * self.TAB_SIZE
-                self.text[self.line_num] += ' ' * self.TAB_SIZE
+                if self.win_is_open:
+                    self.tabAutoCompleteFileNames()
+                else:
+                    self.cursor_surf_rect.x += self.font_size[0] * self.TAB_SIZE
+                    self.text[self.line_num] += ' ' * self.TAB_SIZE
             # Motion Keys (i.e Left, Right, Up, Down)
             # Right Key
             elif event.key == pygame.K_RIGHT:
@@ -239,7 +273,8 @@ class TextEditor:
                         self.mouse_scroll(-1)
                         self.cursor_surf_rect.y += self.font_size[1]
                 case 5: # Scroll Down
-                    if  ((self.te_size[1] - self.font_size[1])// self.font_size[1]) < len(self.text):
+                    # checking if there are more line down or not
+                    if  (self.te_size[1] // self.font_size[1]) - 1 + self.mscroll_num < len(self.text):
                         self.mouse_scroll(1)
                         # print("Scroll Down")
                         self.cursor_surf_rect.y -= self.font_size[1]
@@ -339,6 +374,7 @@ class TextEditor:
         self.get_row_n_col(self.cursor_surf_rect)
 
 
+
     # Save file
     def save_file(self):
         with open(self.file_path, "w") as file:
@@ -356,6 +392,15 @@ class TextEditor:
             self.line_num = len(self.text) - 1
             self.cursor_surf_rect.x = self.font.size(self.text[-1])[0] + self.cursor_posx    
             self.cursor_surf_rect.y = self.font.size(self.text[-1])[1] * len(self.text)
+
+
+    # For tab Auto compelet file names present in that working directory
+    def tabAutoCompleteFileNames(self):
+        for files in self.all_dirs:
+            if files.startswith(self.file_path[0]):
+                self.file_path = files
+                self.all_dirs.remove(self.file_path)
+                break
 
 
 
@@ -402,12 +447,51 @@ class TextEditor:
     # =============== Taking File path =============
     def draw_popup_window(self):
         if self.win_is_open:
-            popup_window_surf = pygame.image.load("bg_popup_window.png")
+            # self.relative_path = os.path.dirname(__file__) # recalculating relative path
             f = self.font.render(self.file_path, 1, (0, 0, 0))
-            self.te_surf.blit(popup_window_surf, (self.te_size[0]//2 - 200, self.te_size[1]//2 - 150//2))
+            self.te_surf.blit(self.popup_window_surf, (self.te_size[0]//2 - 200, self.te_size[1]//2 - 150//2))
             self.te_surf.blit(f, (self.te_size[0]//2 - 200 + 36, self.te_size[1]//2 - 150//2 + 66))
 
 
+    # ============== Syntax Highlighting ==============
+    def syntax_hightlighting(self, curr_ln, keyword, keyword_color):
+        all_pos = findString(self.text[curr_ln], keyword)
+        for pos in all_pos:
+            hl_txt = self.font.render(keyword, 1, keyword_color)
+            x = self.font_size[0] * (pos + 4) + self.space_after_ln - (self.horizontal_scroll * self.hscroll_num)
+            y = self.font_size[1] * (curr_ln + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)
+            hl_txt_rect = hl_txt.get_rect(topleft = (x, y))
+            # pygame.draw.rect(self.te_surf, (0, 255, 0), ((x, y), self.font_size))
+            self.te_surf.blit(hl_txt, hl_txt_rect)
+    
+    def builtin_keyword_sh(self, curr_ln):
+        for keyword in self.builtin_keywords:
+            self.syntax_hightlighting(curr_ln, keyword, self.builtin_keyword_color)
+
+    def comment_sh(self, curr_ln):
+        for i in range(len(self.text[curr_ln])):
+            if self.text[curr_ln][i] == "#":
+                self.syntax_hightlighting(curr_ln, self.text[curr_ln][i:], self.comment_color)
+    
+    def escape_char_sh(self, curr_ln):
+        for i in range(len(self.text[curr_ln])):
+            if self.text[curr_ln][i] == "\\":
+                self.syntax_hightlighting(curr_ln, self.text[curr_ln][i:i+2], self.escape_char_color)
+    
+    def string_sh(self, curr_ln):
+        quote_cnt = 0
+        start = -1
+        end = len(self.text[curr_ln])
+        for i in range(len(self.text[curr_ln])):
+            if self.text[curr_ln][i] == "\"":
+                quote_cnt += 1
+                if quote_cnt == 1:
+                    start = i
+                elif quote_cnt >= 2:
+                    end = i
+                    quote_cnt = 0
+        if start != -1:
+            self.syntax_hightlighting(curr_ln, self.text[curr_ln][start:end + 1], self.string_color)
 
     # Draw 
     def draw(self):
@@ -423,25 +507,35 @@ class TextEditor:
 
         # Scroll
         # self.scroll_window()
-        self.scroll_horizontal_horizontal()
+        self.scroll_horizontal_horizontal()  # Need to implement for left
 
         # Selection 
         # self.get_selection()
         
         # display the text
         for ln, text in enumerate(self.text):
+            # Displaying the line numbers
+            ln_text = self.font.render(str(ln + 1), 1, self.line_num_color)
+            self.ln_txt_rect = ln_text.get_rect(topright = (self.line_num_w - (self.horizontal_scroll * self.hscroll_num), self.font_size[1] * (ln + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)))
+            if(ln == self.line_num):
+                self.clis_rect.y = self.font_size[1] * (ln + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)
+                self.te_surf.blit(self.curr_ln_indi_surf, self.clis_rect)
+            self.te_surf.blit(ln_text, self.ln_txt_rect)
+
+            # Displaying the code text
             txt = self.font.render(text, 1, self.fg_color)
             txt_posx = self.MARGIN + self.line_num_w + self.space_after_ln
             txt_posy = self.font_size[1] * (ln + 1)
             self.txt_rect = txt.get_rect(topleft= (txt_posx - (self.horizontal_scroll * self.hscroll_num), txt_posy - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num) ))
             self.te_surf.blit(txt, self.txt_rect)
 
-            # Displaying the line numbers
-            ln_text = self.font.render(str(ln + 1), 1, self.line_num_color)
-            self.ln_txt_rect = ln_text.get_rect(topright = (self.line_num_w - (self.horizontal_scroll * self.hscroll_num), self.font_size[1] * (ln + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)))
-            if(ln == self.line_num):
-                self.ln_txt_rect.x -= 10
-            self.te_surf.blit(ln_text, self.ln_txt_rect)
+            # syntax highlighting 
+            self.builtin_keyword_sh(ln)
+            self.syntax_hightlighting(ln, "self", self.self_color) # specific for python 
+            self.string_sh(ln)
+            self.escape_char_sh(ln)
+            self.comment_sh(ln)
+        
         
         # popup window for taking file path
         self.draw_popup_window()
