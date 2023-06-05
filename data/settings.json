@@ -1,0 +1,5 @@
+{
+    "cpp": ["int", "bool", "long", "short", "char", "string", "void", " if", "else if", "else", "cout", "cin", "for", "while", "return"],
+    "py": ["import", "def", "print", "class", "from", "for", "while", " if", "if ", "elif", "else", "return", "pass"],
+    "html": ["<html>", "</html>" ,"<body>", "</body>", "<head>", "</head>", "<p>", "</p>" , "</h1>", "<h2>" , "</h2>", "<h3>" , "</h3>", "<h4>" , "</h4>", "<h5>" , "</h5>", "<h6>" , "</h6>"]
+}

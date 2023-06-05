@@ -40,3 +40,25 @@ def findString(string, substr):
             idxs.append(i - len(substr) - 1)
     
     return idxs
+
+
+# Stack class
+class Stack:
+    def __init__(self):
+        self.data = []
+    
+    def push(self, ele):
+        self.data.append(ele)
+
+    def isEmpty(self):
+        return len(self.data) == 0
+    
+    def pop(self):
+        if not self.isEmpty():
+            return self.data.pop()
+    
+    def len(self):
+        return len(self.data)
+
+    def top(self):
+        return self.data[-1]

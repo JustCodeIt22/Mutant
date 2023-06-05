@@ -1,7 +1,8 @@
 import pygame
 from pygame.locals import *
+import json
 import os  # for accessing the directories and files
-from algorithms import *
+from data.algorithms import *
 
 # COLORS
 DEFAULT_BG_COLOR = (11, 14, 20)
@@ -82,12 +83,17 @@ class TextEditor:
         self.selection_start_col = 0
         self.selected_col = 0
         self.selected_row = 0
-        self.selection_dir = 0 # selection direction
+        self.selected_text = ""
+        self.selection_rect = pygame.Rect((0, 0),(0, self.font_size[1]))
+        self.selection_color = (64, 22, 187)
+
+        # var for copying text
+        self.copied_text = ""
 
         # var for popup window
         self.win_is_open = False
         self.relative_path = os.path.dirname(__file__)  # __file__ -> gives the relative path its changes according to the apps loc
-        self.popup_window_surf = pygame.image.load(self.relative_path + "\\bg_popup_window.png")
+        self.popup_window_surf = pygame.image.load(self.relative_path + "\\data/imgs/bg_popup_window.png")
 
         # var for saving and opening files
         self.toSave = False # for if to save a file or not
@@ -98,18 +104,21 @@ class TextEditor:
         self.all_dirs = os.listdir(self.pwd)
 
         # var for Syntax HighLighting
-        self.builtin_keywords_for_all_langs = {
-            "cpp" : ["int", "bool", "long", "short", "char", "string", "void", "if", "else if", "else", "cout", "cin", "for", "while", "return"],
-            "py" : ["import", "def", "print", "class", "for", "while", "if", "elif", "else", "return"],
-            "html": ["<html>", "</html>" ,"<body>", "</body>", "<head>", "</head>", "<p>", "</p>" , "</h1>", "<h2>" , "</h2>", "<h3>" , "</h3>", "<h4>" , "</h4>", "<h5>" , "</h5>", "<h6>" , "</h6>"]
-        }
+        with open("data/settings.json", "r") as file:
+            self.builtin_keywords_for_all_langs = json.load(file)
+        
         self.builtin_keywords = []
         self.builtin_keyword_color = (90, 245, 0)
         self.comment_color = (103, 75, 110)
         self.string_color = (245, 39, 91)
         self.escape_char_color = (200, 0, 0)
+        self.function_color = (255, 77, 41)
+        self.object_color = (138, 99, 255) #(0, 157, 255)
         # specifict for python self word
         self.self_color = (42, 184, 245)
+
+        # var for Undo and Redo
+        self.undo_history = Stack()
 
 
     # Handle Events
@@ -132,6 +141,10 @@ class TextEditor:
             elif event.key == pygame.K_BACKSPACE:
                 if self.win_is_open:
                     self.file_path = self.file_path[:-1]
+                elif self.selected_col > 0:
+                    print(self.selected_text)
+                    self.text[self.line_num] = self.text[self.line_num][:self.curr_col]
+                    self.reset_selection()
                 else:
                     self.isBackspaceHold = True
                     if self.text[self.line_num] or self.text[self.line_num - 1] or self.text[self.line_num - 1] == "":
@@ -150,6 +163,7 @@ class TextEditor:
                                     self.vscroll_num -= 1
                                 # self.scroll_window() # scroll window upwards if the cursor is at top of screen and if there are lines up
                         self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
+                        self.undo_history = Stack()
 
             # Enter 
             elif event.key == pygame.K_RETURN:
@@ -179,6 +193,7 @@ class TextEditor:
             # Shifts
             elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
                 self.shift = True
+                self.selection_start_col = self.curr_col
             elif event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL:
                 self.ctrl = True
             elif event.key == pygame.K_LALT or event.key == pygame.K_RALT:
@@ -194,15 +209,30 @@ class TextEditor:
                 self.win_is_open = True
                 self.toOpen = True
                 # self.open_file()
-            elif self.ctrl and event.key == pygame.K_z:
-                print("Undo!")
+            elif self.ctrl and event.key == pygame.K_n: # #  CTRL + n -> open a new untitled file
+                # self.text = [""]
+                # self.line_num = 0
+                # self.curr_col = 0
+                pass
+            elif self.ctrl and event.key == pygame.K_z: #  CTRL + z -> for undo
+                self.undo_func()
+            elif self.ctrl and event.key == pygame.K_y: # CTRL + y -> for redo
+                self.redo_func()
+            elif self.ctrl and event.key == pygame.K_c: # CTRL + c -> for Copying text
+                self.copied_text = self.selected_text
+                self.reset_selection()
+            elif self.ctrl and event.key == pygame.K_v: # CTRL + v -> for Pasting the copied text
+                self.cursor_surf_rect.x += len(self.copied_text) * self.font_size[0]
+                self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + self.copied_text + self.text[self.line_num][self.curr_col:]
+
             # Tab
             elif event.key == pygame.K_TAB:
                 if self.win_is_open:
                     self.tabAutoCompleteFileNames()
                 else:
                     self.cursor_surf_rect.x += self.font_size[0] * self.TAB_SIZE
-                    self.text[self.line_num] += ' ' * self.TAB_SIZE
+                    tab = ' ' * self.TAB_SIZE
+                    self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + tab + self.text[self.line_num][self.curr_col:]
             # Motion Keys (i.e Left, Right, Up, Down)
             # Right Key
             elif event.key == pygame.K_RIGHT:
@@ -210,9 +240,8 @@ class TextEditor:
                 self.update_cursor_according_to_keys(horizontalDir = 1)
                 # Selection
                 if self.shift:
-                    self.selection_dir = 1
                     self.selected_col += 1
-                    self.get_selection()
+                    self.get_selection(1)
                 self.insert_text()
             # Left Key
             elif event.key == pygame.K_LEFT:
@@ -220,9 +249,8 @@ class TextEditor:
                 self.update_cursor_according_to_keys(horizontalDir = -1)
                 # Selection
                 if self.shift:
-                    self.selection_dir = -1
                     self.selected_col += 1
-                    self.get_selection()
+                    self.get_selection(-1)
                 self.insert_text()
             # Down Key
             elif event.key == pygame.K_DOWN:
@@ -314,6 +342,8 @@ class TextEditor:
 
     # update cursor pos according to mouse pos
     def update_cursor_according_to_mouse(self):
+        # reset the selection
+        self.reset_selection()
         self.mouse_pos = pygame.mouse.get_pos()
         self.mouse_pos = (self.mouse_pos[0] - self.te_pos[0], self.mouse_pos[1] - self.te_pos[1])
         row = self.mouse_pos[1] // self.font_size[1]
@@ -394,6 +424,31 @@ class TextEditor:
             self.cursor_surf_rect.y = self.font.size(self.text[-1])[1] * len(self.text)
 
 
+    # Undo Function
+    def undo_func(self):
+        if self.text[self.line_num]:
+            last_word = self.text[self.line_num].split()[-1]
+            self.undo_history.push(last_word)
+            if len(self.text[self.line_num].split()) == 1:
+                self.text[self.line_num] = self.text[self.line_num][:-(len(last_word))]
+                self.cursor_surf_rect.x -= (len(last_word)) * self.font_size[0]
+            else:
+                self.text[self.line_num] = self.text[self.line_num][:-(len(last_word) + 1)]
+                self.cursor_surf_rect.x -= (len(last_word) + 1) * self.font_size[0]
+            self.get_row_n_col(self.cursor_surf_rect.topleft)
+
+    def redo_func(self):
+        if not self.undo_history.isEmpty():
+            if len(self.text[self.line_num].split()):
+                top_word = " " + self.undo_history.pop()
+            else:
+                top_word = self.undo_history.pop()
+            self.text[self.line_num] += (top_word)
+            self.cursor_surf_rect.x += (len(top_word) * self.font_size[0])
+            self.get_row_n_col(self.cursor_surf_rect.topleft)
+
+
+
     # For tab Auto compelet file names present in that working directory
     def tabAutoCompleteFileNames(self):
         for files in self.all_dirs:
@@ -405,17 +460,28 @@ class TextEditor:
 
 
     # =================== Selection ===========
-    def get_selection(self):
-        if not self.selection_start_col:
-            self.selection_start_col = round(self.cursor_surf_rect.topleft[0] / self.font_size[0]) - 4
-        if self.selection_dir == 1:
-            print(self.text[self.line_num][self.selection_start_col - 1:self.selection_start_col + self.selected_col])
-            print("selection from left to right")
-        elif self.selection_dir == -1:
-            print(self.text[self.line_num][self.selection_start_col - self.selected_col:self.selection_start_col])
-            print("selection from right to left")
-        print(self.selection_start_col)
+
+    def get_selection(self, selection_dir):
+        if selection_dir == -1:
+            self.selected_text = self.text[self.line_num][self.selection_start_col - self.selected_col:self.selection_start_col + 1]
+            self.selection_rect.w = self.font_size[0] * (self.selected_col + 1)
+            self.selection_rect.x = (self.curr_col * self.font_size[0]) + self.line_num_w + self.space_after_ln
+            self.selection_rect.y = (self.line_num + 1) * self.font_size[1]
+            print(self.selected_text)
+        elif selection_dir == 1:
+            self.selected_text = self.text[self.line_num][self.selection_start_col:self.selection_start_col + self.selected_col + 1]
+            self.selection_rect.w = self.font_size[0] * (self.selected_col + 1)
+            self.selection_rect.x = ((self.selection_start_col + 1) * self.font_size[0])  + self.line_num_w + self.space_after_ln
+            self.selection_rect.y = (self.line_num + 1) * self.font_size[1]
+            print(self.selected_text)
+            print(self.selected_text)
+        
+
     
+    def reset_selection(self):
+        self.selected_col = 0
+        self.selection_rect.w = 0
+        self.selected_text = ""
 
 
     # =================== Insertion ============
@@ -492,6 +558,37 @@ class TextEditor:
                     quote_cnt = 0
         if start != -1:
             self.syntax_hightlighting(curr_ln, self.text[curr_ln][start:end + 1], self.string_color)
+    
+    def function_sh(self, curr_ln):
+        temp = self.text[curr_ln].split(".")
+        for i in temp:
+            if "(" in i:
+                a = i.find("(")
+                self.syntax_hightlighting(curr_ln, i[:a].split()[-1], self.function_color)
+            
+    def object_sh(self, curr_ln):
+        temp = self.text[curr_ln].split()
+        for i in temp:
+            if "." in i:
+                a = i.find(".")
+                self.syntax_hightlighting(curr_ln, i[:a], self.object_color)
+
+    def html_sh(self, curr_ln):
+        angular_brackets_cnt = 0
+        start = -1
+        end = len(self.text[curr_ln])
+        for i in range(len(self.text[curr_ln])):
+            if self.text[curr_ln][i] == "\"":
+                angular_brackets_cnt += 1
+                if angular_brackets_cnt == 1:
+                    start = i
+                elif angular_brackets_cnt >= 2:
+                    end = i
+                    angular_brackets_cnt = 0
+        if start != -1:
+            self.syntax_hightlighting(curr_ln, self.text[curr_ln][start:end + 1], self.string_color)
+
+
 
     # Draw 
     def draw(self):
@@ -511,6 +608,9 @@ class TextEditor:
 
         # Selection 
         # self.get_selection()
+        if self.selected_col > 0:
+            pygame.draw.rect(self.te_surf, self.selection_color, self.selection_rect)
+
         
         # display the text
         for ln, text in enumerate(self.text):
@@ -530,6 +630,8 @@ class TextEditor:
             self.te_surf.blit(txt, self.txt_rect)
 
             # syntax highlighting 
+            self.function_sh(ln)
+            self.object_sh(ln)
             self.builtin_keyword_sh(ln)
             self.syntax_hightlighting(ln, "self", self.self_color) # specific for python 
             self.string_sh(ln)
