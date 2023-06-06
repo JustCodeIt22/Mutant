@@ -8,7 +8,7 @@ dispInfo = pygame.display.Info()
 SCREEN_WIDTH = 800 #dispInfo.current_w
 SCREEN_HEIGHT = 600 #dispInfo.current_h
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-texteditor = TextEditor((0, 0), (SCREEN_WIDTH, SCREEN_HEIGHT), cursor_style="filled_box")
+texteditor = TextEditor((0, 0), (SCREEN_WIDTH, SCREEN_HEIGHT))
 
 running = True
 while running:
@@ -26,8 +26,7 @@ while running:
                 sys.exit()
         texteditor.handle_events(event)
     
-    screen.fill((255, 255, 255))
-
+    screen.fill(texteditor.bg_color)
     texteditor.draw()
     pygame.display.update()
     clock.tick(60)

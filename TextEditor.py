@@ -3,6 +3,7 @@ from pygame.locals import *
 import json
 import os  # for accessing the directories and files
 from data.algorithms import *
+from data.plugins.FileManager import *
 
 # COLORS
 DEFAULT_BG_COLOR = (11, 14, 20)
@@ -23,6 +24,7 @@ class TextEditor:
         self.te_size = size
         self.te_surf = pygame.Surface(self.te_size)
         self.file_path = ""
+        self.file_extension = self.file_path.split(".")[-1]
 
         # colors
         self.bg_color = bg_color
@@ -93,15 +95,11 @@ class TextEditor:
         # var for popup window
         self.win_is_open = False
         self.relative_path = os.path.dirname(__file__)  # __file__ -> gives the relative path its changes according to the apps loc
-        self.popup_window_surf = pygame.image.load(self.relative_path + "\\data/imgs/bg_popup_window.png")
+        self.popup_window_surf = pygame.image.load(self.relative_path + "\\data/imgs/bg_popup_window.png").convert_alpha()
 
         # var for saving and opening files
         self.toSave = False # for if to save a file or not
         self.toOpen = False # for if to open a file or not
-
-        # var for tabAutoCompleteFileNames
-        self.pwd = os.getcwd()
-        self.all_dirs = os.listdir(self.pwd)
 
         # var for Syntax HighLighting
         with open("data/settings.json", "r") as file:
@@ -109,6 +107,7 @@ class TextEditor:
         
         self.builtin_keywords = []
         self.builtin_keyword_color = (90, 245, 0)
+        self.comment_symbol = self.builtin_keywords_for_all_langs["all_comments_symbol"]
         self.comment_color = (103, 75, 110)
         self.string_color = (245, 39, 91)
         self.escape_char_color = (200, 0, 0)
@@ -119,6 +118,11 @@ class TextEditor:
 
         # var for Undo and Redo
         self.undo_history = Stack()
+
+        # Plugins 
+        self.fileManager_color = (125, 125, 215)
+        self.fileManager_width = cnv_to_per(30, self.te_size[0])
+        self.fileManager = FileManager(self.fileManager_color, self.font, self.fileManager_width, self.te_size[1])
 
 
     # Handle Events
@@ -174,12 +178,12 @@ class TextEditor:
                     self.toSave = False
                     self.toOpen = False
                     # load the syntax highlighting
-                    file_extension = self.file_path.split(".")[-1]
-                    if file_extension:
+                    self.file_extension = self.file_path.split(".")[-1]
+                    if self.file_extension:
                         try:
-                            self.builtin_keywords = self.builtin_keywords_for_all_langs[file_extension]
+                            self.builtin_keywords = self.builtin_keywords_for_all_langs[self.file_extension]
                         except KeyError:
-                            print(f"Syntax Highlighting for {file_extension} is not implemented till now !!")
+                            print(f"Syntax Highlighting for {self.file_extension} is not implemented till now !!")
                 else:
                     self.cursor_surf_rect.y += self.font_size[1]
                     self.cursor_surf_rect.x = self.cursor_posx
@@ -213,6 +217,8 @@ class TextEditor:
                 # self.text = [""]
                 # self.line_num = 0
                 # self.curr_col = 0
+                pass
+            elif self.fileManager.handle_events(event, self.ctrl): # Then dont add char to text
                 pass
             elif self.ctrl and event.key == pygame.K_z: #  CTRL + z -> for undo
                 self.undo_func()
@@ -409,19 +415,34 @@ class TextEditor:
     def save_file(self):
         with open(self.file_path, "w") as file:
             file.write("\n".join(self.text))
+            self.fileManager.reload()
             print("File Saved Successfully")
 
 
 
     # Open file
     def open_file(self):
-        with open(self.file_path, "r") as file:
-            txt = file.read()
-            self.text = txt.split("\n")
-            print("File Opened Successfully")
-            self.line_num = len(self.text) - 1
-            self.cursor_surf_rect.x = self.font.size(self.text[-1])[0] + self.cursor_posx    
-            self.cursor_surf_rect.y = self.font.size(self.text[-1])[1] * len(self.text)
+        if len(self.file_path.split(".")) == 2: # means the file path is file
+            with open(self.file_path, "r") as file:
+                txt = file.read()
+                self.text = txt.split("\n")
+                print("File Opened Successfully")
+                self.line_num = len(self.text) - 1
+                self.cursor_surf_rect.x = self.font.size(self.text[-1])[0] + self.cursor_posx    
+                self.cursor_surf_rect.y = self.font.size(self.text[-1])[1] * len(self.text)
+        elif self.file_path == "..":
+            pwd = os.getcwd()
+            os.chdir("/".join(pwd.split("\\")[:-1]))
+            print("/".join(pwd.split("\\")[:-1]))
+            self.fileManager.reload()
+        elif len(self.file_path.split(".")) == 1: # if the file path is of folder than change director to that folder
+            pwd = os.getcwd()
+            print(f"current -> {pwd}")
+            os.chdir(self.file_path)
+            pwd = os.getcwd()
+            self.file_path = pwd
+            print(f"changed -> {pwd}")
+            self.fileManager.reload()
 
 
     # Undo Function
@@ -451,6 +472,9 @@ class TextEditor:
 
     # For tab Auto compelet file names present in that working directory
     def tabAutoCompleteFileNames(self):
+        # var for tabAutoCompleteFileNames
+        self.pwd = os.getcwd()
+        self.all_dirs = os.listdir(self.pwd)
         for files in self.all_dirs:
             if files.startswith(self.file_path[0]):
                 self.file_path = files
@@ -587,7 +611,17 @@ class TextEditor:
                     angular_brackets_cnt = 0
         if start != -1:
             self.syntax_hightlighting(curr_ln, self.text[curr_ln][start:end + 1], self.string_color)
-
+    
+    # Enable the syntax_highlighting
+    def enable_syntax_highlighting(self, curr_ln):
+        # syntax highlighting 
+        self.function_sh(curr_ln)
+        self.object_sh(curr_ln)
+        self.builtin_keyword_sh(curr_ln)
+        self.syntax_hightlighting(curr_ln, "self", self.self_color) # specific for python 
+        self.string_sh(curr_ln)
+        self.escape_char_sh(curr_ln)
+        self.comment_sh(curr_ln)
 
 
     # Draw 
@@ -629,18 +663,15 @@ class TextEditor:
             self.txt_rect = txt.get_rect(topleft= (txt_posx - (self.horizontal_scroll * self.hscroll_num), txt_posy - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num) ))
             self.te_surf.blit(txt, self.txt_rect)
 
-            # syntax highlighting 
-            self.function_sh(ln)
-            self.object_sh(ln)
-            self.builtin_keyword_sh(ln)
-            self.syntax_hightlighting(ln, "self", self.self_color) # specific for python 
-            self.string_sh(ln)
-            self.escape_char_sh(ln)
-            self.comment_sh(ln)
+            # Enabling the Syntax Highlighting
+            self.enable_syntax_highlighting(ln)
         
         
-        # popup window for taking file path
-        self.draw_popup_window()
-
         # Draw cursor
         self.te_surf.blit(self.cursor_surf, self.cursor_surf_rect)
+
+        # Draw FileManger 
+        self.fileManager.draw(self.te_surf)
+
+        # popup window for taking file path
+        self.draw_popup_window()
