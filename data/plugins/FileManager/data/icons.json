@@ -4,5 +4,6 @@
     "py_ic" : "data/plugins/FileManager/data/imgs/py_ic.png",
     "html_ic" : "data/plugins/FileManager/data/imgs/html_ic.png",
     "json_ic" : "data/plugins/FileManager/data/imgs/json_ic.png",
+    "java_ic" : "data/plugins/FileManager/data/imgs/java_ic.png",
     "default_ic" : "data/plugins/FileManager/data/imgs/default_ic.png"
 }

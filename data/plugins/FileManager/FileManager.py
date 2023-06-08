@@ -27,7 +27,7 @@ class FileManager:
         self.fm_rect = pygame.Rect((0, 0, 0, self.height))
         self.dirnames_x = -self.width + 10 # just for off screen
         self.dirnames_top = 40
-        self.dirnames_margin = 20
+        self.dirnames_margin = 22
     
     # Handle events
     def handle_events(self, event, ctrl):
@@ -38,12 +38,12 @@ class FileManager:
     
     # Display dirnames
     def display_dirnames(self, surf):
-        surf.blit(self.heading, (self.dirnames_x - 20, 10))
+        surf.blit(self.heading, (self.dirnames_x - 18, 10))
         for i, dirs in enumerate(self.dir_list):
             dir_name = self.font.render(dirs, 1, self.fg_color)
-            pos = (self.dirnames_x - 22,  (self.dirnames_margin * (i + 1)) + self.dirnames_top)
+            pos = (self.dirnames_x - 12,  (self.dirnames_margin * (i + 1)) + self.dirnames_top)
             if self.fm_rect.width >= self.width//2:
-                surf.blit(dir_name, (self.dirnames_x, (self.dirnames_margin * (i + 1))+ self.dirnames_top))
+                surf.blit(dir_name, (self.dirnames_x + 12, (self.dirnames_margin * (i + 1))+ self.dirnames_top))
                 self.draw_icon(surf, dirs, pos)
     
 
@@ -65,7 +65,6 @@ class FileManager:
             except:
                 surf.blit(self.ic_imgs["default_ic"], pos)
                 print(f"icon of {file_name[-1]} not present in database")
-                
 
     # Draw 
     def draw(self, surf):

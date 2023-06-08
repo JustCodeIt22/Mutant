@@ -3,7 +3,7 @@ from pygame.locals import *
 import json
 import os  # for accessing the directories and files
 from data.algorithms import *
-from data.plugins.FileManager import *
+from data.plugins.FileManager import FileManager
 
 # COLORS
 DEFAULT_BG_COLOR = (11, 14, 20)
@@ -40,6 +40,7 @@ class TextEditor:
         self.line_num_color = line_num_color
         self.line_num_w = 30
         self.space_after_ln = 4
+        self.num_line_screen_can_display = self.te_size[1] // self.font_size[1] - 1
         # self.line_bgrectcolor = line_bgrectcolor
 
         # Cursor
@@ -80,6 +81,7 @@ class TextEditor:
 
         # var for mouse scroll
         self.mscroll_num = 0
+        self.mouse_scroll_speed = 3
 
         # var for selection
         self.selection_start_col = 0
@@ -96,6 +98,10 @@ class TextEditor:
         self.win_is_open = False
         self.relative_path = os.path.dirname(__file__)  # __file__ -> gives the relative path its changes according to the apps loc
         self.popup_window_surf = pygame.image.load(self.relative_path + "\\data/imgs/bg_popup_window.png").convert_alpha()
+
+        # var for tabAutoCompleteFileNames
+        self.pwd = os.getcwd()
+        self.all_dirs = os.listdir(self.pwd)
 
         # var for saving and opening files
         self.toSave = False # for if to save a file or not
@@ -123,6 +129,11 @@ class TextEditor:
         self.fileManager_color = (125, 125, 215)
         self.fileManager_width = cnv_to_per(30, self.te_size[0])
         self.fileManager = FileManager(self.fileManager_color, self.font, self.fileManager_width, self.te_size[1])
+
+
+        # Lazy Loading variables
+        self.text_to_display = [""]
+        self.scroll_y = 0
 
 
     # Handle Events
@@ -303,16 +314,28 @@ class TextEditor:
                     self.update_cursor_according_to_mouse()
                 case 4: # Scroll Up
                     # print("Scroll Up")
-                    if self.mscroll_num > 0:
-                        self.mouse_scroll(-1)
-                        self.cursor_surf_rect.y += self.font_size[1]
+                    if self.ctrl: # CTRL + mouse scroll -> increases the mouse scrolling speed
+                        if self.mscroll_num > 0:
+                            self.mouse_scroll(-self.mouse_scroll_speed * 2)# mscroll speed becomes twice
+                            self.cursor_surf_rect.y += self.font_size[1]
+                    else:
+                        if self.mscroll_num > 0:
+                            self.mouse_scroll(-self.mouse_scroll_speed)
+                            self.cursor_surf_rect.y += self.font_size[1]
+                    # print(self.mscroll_num)
                 case 5: # Scroll Down
                     # checking if there are more line down or not
-                    if  (self.te_size[1] // self.font_size[1]) - 1 + self.mscroll_num < len(self.text):
-                        self.mouse_scroll(1)
-                        # print("Scroll Down")
-                        self.cursor_surf_rect.y -= self.font_size[1]
-            
+                    if self.ctrl:
+                        if  (self.te_size[1] // self.font_size[1]) - 1 + self.mscroll_num < len(self.text):
+                            self.mouse_scroll(self.mouse_scroll_speed * 2) # mscroll speed becomes twice
+                            # print("Scroll Down")
+                            self.cursor_surf_rect.y -= self.font_size[1]
+                    else:
+                        if  (self.te_size[1] // self.font_size[1]) - 1 + self.mscroll_num < len(self.text):
+                            self.mouse_scroll(self.mouse_scroll_speed)
+                            # print("Scroll Down")
+                            self.cursor_surf_rect.y -= self.font_size[1]
+                    # print(self.mscroll_num)
                 
 
     # Get the current column and row
@@ -427,9 +450,12 @@ class TextEditor:
                 txt = file.read()
                 self.text = txt.split("\n")
                 print("File Opened Successfully")
-                self.line_num = len(self.text) - 1
-                self.cursor_surf_rect.x = self.font.size(self.text[-1])[0] + self.cursor_posx    
-                self.cursor_surf_rect.y = self.font.size(self.text[-1])[1] * len(self.text)
+                self.line_num = 0 #len(self.text) - 1
+                self.cursor_surf_rect.x = self.cursor_posx   
+                self.cursor_surf_rect.y = self.font_size[1]
+                self.scroll_y = 0
+                #self.cursor_surf_rect.x = self.font.size(self.text[-1])[0] + self.cursor_posx    
+                #self.cursor_surf_rect.y = self.font.size(self.text[-1])[1] * len(self.text)
         elif self.file_path == "..":
             pwd = os.getcwd()
             os.chdir("/".join(pwd.split("\\")[:-1]))
@@ -442,6 +468,9 @@ class TextEditor:
             pwd = os.getcwd()
             self.file_path = pwd
             print(f"changed -> {pwd}")
+            # Reloading all files and folders
+            self.pwd = os.getcwd()
+            self.all_dirs = os.listdir(self.pwd)
             self.fileManager.reload()
 
 
@@ -472,11 +501,9 @@ class TextEditor:
 
     # For tab Auto compelet file names present in that working directory
     def tabAutoCompleteFileNames(self):
-        # var for tabAutoCompleteFileNames
-        self.pwd = os.getcwd()
-        self.all_dirs = os.listdir(self.pwd)
+        
         for files in self.all_dirs:
-            if files.startswith(self.file_path[0]):
+            if self.file_path.split(".")[0] in files: # files.startswith(self.file_path[0]):
                 self.file_path = files
                 self.all_dirs.remove(self.file_path)
                 break
@@ -647,24 +674,28 @@ class TextEditor:
 
         
         # display the text
-        for ln, text in enumerate(self.text):
+        # Adding Lazy loading
+        # Want to add vscroll self.text_to_display = self.text[self.mscroll_num + self.vscroll:self.num_line_screen_can_display + self.mscroll_num + self.vscorll]
+        self.text_to_display = self.text[self.mscroll_num:self.num_line_screen_can_display + self.mscroll_num]
+        for ln, text in enumerate(self.text_to_display):
             # Displaying the line numbers
-            ln_text = self.font.render(str(ln + 1), 1, self.line_num_color)
-            self.ln_txt_rect = ln_text.get_rect(topright = (self.line_num_w - (self.horizontal_scroll * self.hscroll_num), self.font_size[1] * (ln + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)))
-            if(ln == self.line_num):
-                self.clis_rect.y = self.font_size[1] * (ln + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)
+            self.scroll_y = ln + self.mscroll_num
+            ln_text = self.font.render(str(self.scroll_y + 1), 1, self.line_num_color)
+            self.ln_txt_rect = ln_text.get_rect(topright = (self.line_num_w - (self.horizontal_scroll * self.hscroll_num), self.font_size[1] * (self.scroll_y + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)))
+            if(self.scroll_y == self.line_num):
+                self.clis_rect.y = self.font_size[1] * (self.scroll_y + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)
                 self.te_surf.blit(self.curr_ln_indi_surf, self.clis_rect)
             self.te_surf.blit(ln_text, self.ln_txt_rect)
 
             # Displaying the code text
             txt = self.font.render(text, 1, self.fg_color)
             txt_posx = self.MARGIN + self.line_num_w + self.space_after_ln
-            txt_posy = self.font_size[1] * (ln + 1)
+            txt_posy = self.font_size[1] * (self.scroll_y + 1)
             self.txt_rect = txt.get_rect(topleft= (txt_posx - (self.horizontal_scroll * self.hscroll_num), txt_posy - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num) ))
             self.te_surf.blit(txt, self.txt_rect)
 
             # Enabling the Syntax Highlighting
-            self.enable_syntax_highlighting(ln)
+            self.enable_syntax_highlighting(self.scroll_y)
         
         
         # Draw cursor
