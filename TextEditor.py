@@ -5,13 +5,14 @@ import os  # for accessing the directories and files
 from data.algorithms import *
 from data.plugins.FileManager import FileManager
 
+
 # COLORS
 DEFAULT_BG_COLOR = (11, 14, 20)
 DEFAULT_CURSOR_COLOR = (255, 255, 255)
 
 class TextEditor:
     # Class Constructor
-    def __init__(self, pos, size, bg_color = DEFAULT_BG_COLOR, tab_size = 4, cursor_color = DEFAULT_CURSOR_COLOR, cursor_style="filled_box", font = "Consolas", font_size = 18, line_num_color = (170, 170, 0), curr_ln_indi_color = (41, 46, 57) ,line_bgrectcolor = (55, 55, 55)):
+    def __init__(self, pos, size, bg_color = DEFAULT_BG_COLOR, tab_size = 4, cursor_color = DEFAULT_CURSOR_COLOR, cursor_style="filled_box", font_size = 18, line_num_color = (170, 170, 0), curr_ln_indi_color = (41, 46, 57) ,line_bgrectcolor = (55, 55, 55)):
         # CONSTANTS
         self.MARGIN = 10
         self.TAB_SIZE = tab_size
@@ -20,9 +21,9 @@ class TextEditor:
         pygame.init()
         pygame.font.init()
         self.te_display = pygame.display.get_surface()
-        self.te_pos = pos
+        self.te_pos = (pos[0] + 3, pos[1] + 3) #pos
         self.te_size = size
-        self.te_surf = pygame.Surface(self.te_size)
+        self.te_surf = pygame.Surface((self.te_size[0] - 6, self.te_size[1] - 6))
         self.file_path = ""
         self.file_extension = self.file_path.split(".")[-1]
 
@@ -31,15 +32,16 @@ class TextEditor:
         self.fg_color = (255, 255, 255)
         
         # font
-        self.font = pygame.font.SysFont(font, font_size)
+        self.font = pygame.font.SysFont("Consolas", font_size)
         self.font_size = self.font.size("a")
-        self.text = [""]
+        self.text = [""] # list of strings each element is new line
 
         # line numbers
         self.line_num = 0
         self.line_num_color = line_num_color
         self.line_num_w = 30
         self.space_after_ln = 4
+        self.offset = self.font_size[0] * self.space_after_ln
         self.num_line_screen_can_display = self.te_size[1] // self.font_size[1] - 1
         # self.line_bgrectcolor = line_bgrectcolor
 
@@ -91,13 +93,22 @@ class TextEditor:
         self.selection_rect = pygame.Rect((0, 0),(0, self.font_size[1]))
         self.selection_color = (64, 22, 187)
 
+        # var for selection using mouse
+        self.mouseLeftBtnDown = False
+        self.mselection_start_row_n_col = (0, 0)
+        self.mselection_end_row_n_col = (0, 0)
+        self.mselected_text = [] # list of strings each element is new line
+        self.mLBD_N_mMotion = False # mouse left btn down and mouse in motion
+        self.dispMouseSelection = False
+
         # var for copying text
         self.copied_text = ""
 
         # var for popup window
         self.win_is_open = False
-        self.relative_path = os.path.dirname(__file__)  # __file__ -> gives the relative path its changes according to the apps loc
-        self.popup_window_surf = pygame.image.load(self.relative_path + "\\data/imgs/bg_popup_window.png").convert_alpha()
+        # self.relative_path = os.path.dirname(__file__)  # __file__ -> gives the relative path its changes according to the apps loc
+        # self.popup_window_surf = pygame.image.load(self.relative_path + "\\data/imgs/bg_popup_window.png").convert_alpha()
+        self.popup_window_surf = pygame.image.load("data/imgs/bg_popup_window.png").convert_alpha()
 
         # var for tabAutoCompleteFileNames
         self.pwd = os.getcwd()
@@ -125,15 +136,25 @@ class TextEditor:
         # var for Undo and Redo
         self.undo_history = Stack()
 
-        # Plugins 
-        self.fileManager_color = (125, 125, 215)
-        self.fileManager_width = cnv_to_per(30, self.te_size[0])
-        self.fileManager = FileManager(self.fileManager_color, self.font, self.fileManager_width, self.te_size[1])
-
-
         # Lazy Loading variables
         self.text_to_display = [""]
         self.scroll_y = 0
+
+        """ ==== Plugins ====== """
+        # File Manager
+        self.fileManager_bgcolor = (15, 17, 42)#(11, 14, 20)#(125, 125, 215)
+        self.fileManager_fgcolor = (67, 255, 167)#(61, 91, 102)
+        self.fileManager_width = cnv_to_per(30, self.te_size[0])
+        self.fileManager = FileManager(self.fileManager_bgcolor, self.fileManager_width, self.te_size[1],  fg_color=self.fileManager_fgcolor)
+
+        # Mutant Mode
+        self.mutantMode = False
+        self.cmd = ""
+        self.prev_cmd = ""
+        self.mode_indi_rect = pygame.Rect(10, 4, 10, 10)
+        self.mutant_mode_color = (18, 255, 117)
+        self.normal_mode_color = bg_color
+        self.mode_color = self.normal_mode_color
 
 
     # Handle Events
@@ -152,6 +173,7 @@ class TextEditor:
                 self.win_is_open = False
                 self.toSave = False
                 self.toOpen = False
+                
             # Backspace
             elif event.key == pygame.K_BACKSPACE:
                 if self.win_is_open:
@@ -163,20 +185,21 @@ class TextEditor:
                 else:
                     self.isBackspaceHold = True
                     if self.text[self.line_num] or self.text[self.line_num - 1] or self.text[self.line_num - 1] == "":
-                        if self.text[self.line_num] and self.curr_col != 0: # This is for char deletion
-                            self.cursor_surf_rect.x -= self.font_size[0]
-                            self.delete_text()
-                        else:
-                            if self.line_num > 0: # This is for the line deletion when the cursor is at the start of the line 
-                                self.cursor_surf_rect.y = self.font_size[1] * (self.line_num - self.vscroll_num)
-                                self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
-                                self.text[self.line_num] = self.text[self.line_num - 1] + self.text[self.line_num] 
-                                self.text.pop(self.line_num - 1)
-                                self.line_num -= 1
-                                if(self.cursor_surf_rect.topleft[1] <= self.font_size[1] and self.line_num > 0):
-                                    self.cursor_scroll = 0
-                                    self.vscroll_num -= 1
-                                # self.scroll_window() # scroll window upwards if the cursor is at top of screen and if there are lines up
+                        if not self.delete_selected_text():
+                            if self.text[self.line_num] and self.curr_col != 0: # This is for char deletion
+                                self.cursor_surf_rect.x -= self.font_size[0]
+                                self.delete_text()
+                            else:
+                                if self.line_num > 0: # This is for the line deletion when the cursor is at the start of the line 
+                                    self.cursor_surf_rect.y = self.font_size[1] * (self.line_num - self.vscroll_num)
+                                    self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
+                                    self.text[self.line_num] = self.text[self.line_num - 1] + self.text[self.line_num] 
+                                    self.text.pop(self.line_num - 1)
+                                    self.line_num -= 1
+                                    if(self.cursor_surf_rect.topleft[1] <= self.font_size[1] and self.line_num > 0):
+                                        self.cursor_scroll = 0
+                                        self.vscroll_num -= 1
+                                    # self.scroll_window() # scroll window upwards if the cursor is at top of screen and if there are lines up
                         self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
                         self.undo_history = Stack()
 
@@ -212,7 +235,14 @@ class TextEditor:
             elif event.key == pygame.K_LCTRL or event.key == pygame.K_RCTRL:
                 self.ctrl = True
             elif event.key == pygame.K_LALT or event.key == pygame.K_RALT:
-                pass
+                self.mutantMode = not self.mutantMode
+                if self.mutantMode: # if mutant mode enabled
+                    self.mode_color = self.mutant_mode_color
+                else: # if mutant mode disabled
+                    self.mode_color = self.normal_mode_color
+                    self.mutantMode = False
+                    self.cmd = ""
+                    self.prev_cmd = ""
             elif event.key == pygame.K_CAPSLOCK:
                 pass 
             elif self.ctrl and event.key == pygame.K_s: #  CTRL + s -> for saving file
@@ -236,11 +266,38 @@ class TextEditor:
             elif self.ctrl and event.key == pygame.K_y: # CTRL + y -> for redo
                 self.redo_func()
             elif self.ctrl and event.key == pygame.K_c: # CTRL + c -> for Copying text
-                self.copied_text = self.selected_text
+                self.mouse_get_selection()
+                self.dispMouseSelection = False
+                if self.selected_text:
+                    self.copied_text = self.selected_text
+                elif self.mselected_text:
+                    self.copied_text = self.mselected_text
                 self.reset_selection()
             elif self.ctrl and event.key == pygame.K_v: # CTRL + v -> for Pasting the copied text
-                self.cursor_surf_rect.x += len(self.copied_text) * self.font_size[0]
-                self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + self.copied_text + self.text[self.line_num][self.curr_col:]
+                if isinstance(self.copied_text, str):
+                    self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + self.copied_text + self.text[self.line_num][self.curr_col:]
+                    self.cursor_surf_rect.x += len(self.copied_text) * self.font_size[0]
+                    print("hello")
+                # Pasting for multiple lines
+                elif isinstance(self.copied_text, list):
+                    # pasting on the line having text
+                    if self.text[self.line_num]:
+                        self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + self.copied_text[0] + self.text[self.line_num][self.curr_col:]
+                        self.text[self.line_num + 1:self.line_num] = self.copied_text[1:]
+                        self.line_num += len(self.copied_text[1:])
+                        self.cursor_surf_rect.x = (len(self.copied_text[-1]) + self.space_after_ln) * self.font_size[0] + self.space_after_ln
+                        self.cursor_surf_rect.y += len(self.copied_text[1:]) * self.font_size[1]
+                    # pasting on the line having no text 
+                    else: 
+                        print("exectuted")
+                        self.text.pop(self.line_num)
+                        self.text[self.line_num:self.line_num] = self.copied_text
+                        self.line_num += len(self.copied_text) - 1
+                        self.cursor_surf_rect.x += len(self.copied_text[-1]) * self.font_size[0]
+                        self.cursor_surf_rect.y += (len(self.copied_text) - 1) * self.font_size[1]
+                    
+                self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate
+
 
             # Tab
             elif event.key == pygame.K_TAB:
@@ -289,6 +346,8 @@ class TextEditor:
             else:
                 if self.win_is_open:
                     self.file_path += event.unicode
+                elif self.mutantMode:
+                    self.cmd += event.unicode
                 else:
                     self.cursor_surf_rect.x += self.font_size[0]
                     # insertion
@@ -306,22 +365,30 @@ class TextEditor:
             elif event.key == pygame.K_LSHIFT or event.key == pygame.K_RSHIFT:
                 self.shift = False
                 self.selection_start_col = 0
+            elif event.key == pygame.K_LALT or event.key == pygame.K_RALT:
+                # self.mutantMode = False
+                pass
 
         # Mouse Events
         if event.type == pygame.MOUSEBUTTONDOWN:
             match(event.button):
                 case 1: # Left Mouse Button
                     self.update_cursor_according_to_mouse()
+                    self.mouseLeftBtnDown = True
+                    self.dispMouseSelection = False
+                    self.mselected_text = []
+                    self.mouse_pos = pygame.mouse.get_pos()
+                    self.mselection_start_row_n_col = (self.mouse_pos[0]//self.font_size[0] - self.space_after_ln, self.mouse_pos[1]//self.font_size[1] - 1)
                 case 4: # Scroll Up
                     # print("Scroll Up")
                     if self.ctrl: # CTRL + mouse scroll -> increases the mouse scrolling speed
                         if self.mscroll_num > 0:
                             self.mouse_scroll(-self.mouse_scroll_speed * 2)# mscroll speed becomes twice
-                            self.cursor_surf_rect.y += self.font_size[1]
+                            self.cursor_surf_rect.y += (self.font_size[1] * self.mouse_scroll_speed * 2)
                     else:
                         if self.mscroll_num > 0:
                             self.mouse_scroll(-self.mouse_scroll_speed)
-                            self.cursor_surf_rect.y += self.font_size[1]
+                            self.cursor_surf_rect.y += self.font_size[1] * self.mouse_scroll_speed
                     # print(self.mscroll_num)
                 case 5: # Scroll Down
                     # checking if there are more line down or not
@@ -329,14 +396,30 @@ class TextEditor:
                         if  (self.te_size[1] // self.font_size[1]) - 1 + self.mscroll_num < len(self.text):
                             self.mouse_scroll(self.mouse_scroll_speed * 2) # mscroll speed becomes twice
                             # print("Scroll Down")
-                            self.cursor_surf_rect.y -= self.font_size[1]
+                            self.cursor_surf_rect.y -= (self.font_size[1] * self.mouse_scroll_speed * 2)
                     else:
                         if  (self.te_size[1] // self.font_size[1]) - 1 + self.mscroll_num < len(self.text):
                             self.mouse_scroll(self.mouse_scroll_speed)
                             # print("Scroll Down")
-                            self.cursor_surf_rect.y -= self.font_size[1]
+                            self.cursor_surf_rect.y -=  self.font_size[1] * self.mouse_scroll_speed
                     # print(self.mscroll_num)
-                
+        if event.type == pygame.MOUSEBUTTONUP:
+            match(event.button):
+                case 1: # Left Mouse Button
+                    self.mouseLeftBtnDown = False
+        
+        if event.type == pygame.MOUSEMOTION and self.mouseLeftBtnDown:
+            self.mouse_pos = pygame.mouse.get_pos()
+            if self.text:
+                try:
+                    cols_condition = len(self.text[self.mouse_pos[1]//self.font_size[1] - 1]) > (self.mouse_pos[0]//self.font_size[0] - self.space_after_ln - 1)
+                    rows_condition = len(self.text) > self.mouse_pos[1]//self.font_size[1] - 1
+                    if cols_condition and rows_condition:
+                        self.mselection_end_row_n_col = (self.mouse_pos[0]//self.font_size[0] - self.space_after_ln - 1, self.mouse_pos[1]//self.font_size[1] - 1)
+                except IndexError:
+                    pass               
+            self.dispMouseSelection = True
+
 
     # Get the current column and row
     def get_row_n_col(self, relative_pos):
@@ -404,12 +487,17 @@ class TextEditor:
                 self.cursor_surf_rect.x += (horizontalDir * self.font_size[0])
         if verticalDir and self.line_num + verticalDir < len(self.text):
             if (0 < rowAfterMotion <= len(self.text)):
+                tmp_line_num = self.line_num
                 self.line_num += verticalDir
-                self.cursor_surf_rect.x = self.font.size(self.text[self.line_num])[0] + self.cursor_posx
-                self.cursor_surf_rect.y += (verticalDir * self.font_size[1])
+                if (self.curr_col > len(self.text[tmp_line_num + verticalDir])):
+                    self.cursor_surf_rect.x = self.font.size(self.text[self.line_num])[0] + self.cursor_posx
+                    self.cursor_surf_rect.y += (verticalDir * self.font_size[1])
+                else:
+                    self.cursor_surf_rect.y += (verticalDir * self.font_size[1])
+                # self.cursor_surf_rect.x = self.font.size(self.text[self.line_num])[0] + self.cursor_posx
 
 
-
+    
     # scroll
     def scroll_window(self):
         pos = self.cursor_surf_rect.bottomleft
@@ -425,6 +513,9 @@ class TextEditor:
         if(pos >= self.te_size[0]): # cnv_to_per(90, self.te_size[0])
             self.cursor_surf_rect.x -= self.horizontal_scroll
             self.hscroll_num += 1
+        elif(self.curr_col > 0  and self.cursor_surf_rect.left <= 10):
+            self.cursor_surf_rect.x += self.horizontal_scroll
+            self.hscroll_num -= 1
 
 
 
@@ -445,34 +536,40 @@ class TextEditor:
 
     # Open file
     def open_file(self):
-        if len(self.file_path.split(".")) == 2: # means the file path is file
-            with open(self.file_path, "r") as file:
-                txt = file.read()
-                self.text = txt.split("\n")
-                print("File Opened Successfully")
-                self.line_num = 0 #len(self.text) - 1
-                self.cursor_surf_rect.x = self.cursor_posx   
-                self.cursor_surf_rect.y = self.font_size[1]
-                self.scroll_y = 0
-                #self.cursor_surf_rect.x = self.font.size(self.text[-1])[0] + self.cursor_posx    
-                #self.cursor_surf_rect.y = self.font.size(self.text[-1])[1] * len(self.text)
-        elif self.file_path == "..":
-            pwd = os.getcwd()
-            os.chdir("/".join(pwd.split("\\")[:-1]))
-            print("/".join(pwd.split("\\")[:-1]))
-            self.fileManager.reload()
-        elif len(self.file_path.split(".")) == 1: # if the file path is of folder than change director to that folder
-            pwd = os.getcwd()
-            print(f"current -> {pwd}")
-            os.chdir(self.file_path)
-            pwd = os.getcwd()
-            self.file_path = pwd
-            print(f"changed -> {pwd}")
-            # Reloading all files and folders
-            self.pwd = os.getcwd()
-            self.all_dirs = os.listdir(self.pwd)
-            self.fileManager.reload()
-
+        try:
+            if len(self.file_path.split(".")) == 2: # means the file path is file
+                with open(self.file_path, "r") as file:
+                    txt = file.read()
+                    self.text = txt.split("\n")
+                    print("File Opened Successfully")
+                    # Reseting all
+                    self.line_num = 0 #len(self.text) - 1
+                    self.cursor_surf_rect.x = self.cursor_posx   
+                    self.cursor_surf_rect.y = self.font_size[1]
+                    self.scroll_y = 0
+                    self.vscroll_num = 0
+                    self.hscroll_num = 0
+                    self.mscroll_num = 0
+                    #self.cursor_surf_rect.x = self.font.size(self.text[-1])[0] + self.cursor_posx    
+                    #self.cursor_surf_rect.y = self.font.size(self.text[-1])[1] * len(self.text)
+            elif self.file_path == "..":
+                pwd = os.getcwd()
+                os.chdir("/".join(pwd.split("\\")[:-1]))
+                print("/".join(pwd.split("\\")[:-1]))
+                self.fileManager.reload()
+            elif len(self.file_path.split(".")) == 1: # if the file path is of folder than change director to that folder
+                pwd = os.getcwd()
+                print(f"current -> {pwd}")
+                os.chdir(self.file_path)
+                pwd = os.getcwd()
+                self.file_path = pwd
+                print(f"changed -> {pwd}")
+                # Reloading all files and folders
+                self.pwd = os.getcwd()
+                self.all_dirs = os.listdir(self.pwd)
+                self.fileManager.reload()
+        except FileNotFoundError:
+            print("File Not Found")
 
     # Undo Function
     def undo_func(self):
@@ -501,7 +598,6 @@ class TextEditor:
 
     # For tab Auto compelet file names present in that working directory
     def tabAutoCompleteFileNames(self):
-        
         for files in self.all_dirs:
             if self.file_path.split(".")[0] in files: # files.startswith(self.file_path[0]):
                 self.file_path = files
@@ -525,14 +621,96 @@ class TextEditor:
             self.selection_rect.x = ((self.selection_start_col + 1) * self.font_size[0])  + self.line_num_w + self.space_after_ln
             self.selection_rect.y = (self.line_num + 1) * self.font_size[1]
             print(self.selected_text)
-            print(self.selected_text)
         
+
+    # ================== Selection Using mouse ============== #
+    def mouse_get_selection(self):
+        start_col, start_row = self.mselection_start_row_n_col
+        start_row += self.mscroll_num
+        end_col, end_row = self.mselection_end_row_n_col
+        end_row += self.mscroll_num
+
+        if (start_row >= 0 and end_row < len(self.text)):
+            if start_row == end_row: # For same line selection
+                # self.mselected_text.append(self.text[start_row][start_col:end_col + 1])
+                self.selected_text = self.text[start_row][start_col:end_col + 1]
+            if start_row < end_row: # For up to down selection
+                for i in range(start_row, end_row + 1):
+                    if i == start_row: # For the start row
+                        self.mselected_text.append(self.text[i][start_col:len(self.text[i]) + 1])
+                    if start_row < i < end_row: # For row between the start row and end row
+                        self.mselected_text.append(self.text[i][0:len(self.text[i]) + 1])
+                    if i == end_row: # For the end row
+                        self.mselected_text.append(self.text[i][0:end_col + 1])
+                print(self.mselected_text)
+            else: # For down to up selection
+                # Want to implement down to up
+                pass
+                # raise Exception("Want to implement down to up selection!")
+    
+    def draw_mouse_selection(self):
+        start_col, start_row = self.mselection_start_row_n_col
+        start_row += self.mscroll_num
+        end_col, end_row = self.mselection_end_row_n_col
+        end_row += self.mscroll_num
+        if (start_row >= 0 and end_row < len(self.text)):
+            if start_row == end_row:
+                px = (start_col + self.space_after_ln) * self.font_size[0] + self.space_after_ln
+                py = (start_row + 1) * self.font_size[1]
+                w = (end_col - start_col + 1) * self.font_size[0]
+                h = self.font_size[1]
+                pygame.draw.rect(self.te_surf, (0, 0, 255), ((px, py), (w, h)))
+
+            """ Multi line selection implemented just disabled for now """
+            if start_row < end_row: 
+                spx = (start_col * self.font_size[0] + self.offset) - self.font_size[0] + 4 
+                spy = (start_row + 1) * self.font_size[1] - 2 - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num) 
+                if (self.mouse_pos[0]//self.font_size[0]) < len(self.text[end_row]) + self.space_after_ln:
+                    epx = ((self.mouse_pos[0]//self.font_size[0]) * self.font_size[0] + self.font_size[0]) - 6
+                else:
+                    epx = len(self.text[end_row]) * self.font_size[0] + self.offset + 3
+                epy = (end_row + 1) * self.font_size[1] - 2 - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num) 
+                w, h = self.font_size
+
+                if self.mouseLeftBtnDown == False:
+                    inc = 3
+                    h += inc
+                    spy -= inc/2
+                    epy -= inc/2
+
+
+                # #Rectangle selection
+                for i in range(start_row, end_row + 1):
+                    if i == start_row:
+                        x = self.cursor_surf_rect.x
+                        width = len(self.text[start_row][start_col:]) * self.font_size[0]
+                    elif i == end_row:
+                        x = self.offset 
+                        width = len(self.text[end_row][:end_col]) * self.font_size[0]  + self.font_size[0] + self.space_after_ln
+                    else:
+                        x = self.offset
+                        width = len(self.text[i]) * self.font_size[0] + self.space_after_ln
+                    height = self.font_size[1]
+                    y = (height * (i + 1)) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num) 
+                    pygame.draw.rect(self.te_surf, (45, 83, 126), ((x, y), (width, height)))
+                    # pygame.draw.rect(self.te_surf, (27, 58, 91), ((x, y), (width, height)))
+
+                pygame.draw.rect(self.te_surf, (0, 255, 0), ((spx, spy), (w, h + 4))) # Start indicator
+                pygame.draw.rect(self.te_surf, (255, 0, 0), ((epx, epy), (w, h + 4))) # end indicator
 
     
     def reset_selection(self):
         self.selected_col = 0
         self.selection_rect.w = 0
         self.selected_text = ""
+
+        # var for selection using mouse
+        self.mouseLeftBtnDown = False
+        self.mselection_start_row_n_col = (0, 0)
+        self.mselection_end_row_n_col = (0, 0)
+        self.mselected_text = [] # list of strings each element is new line
+        self.mLBD_N_mMotion = False # mouse left btn down and mouse in motion
+        self.dispMouseSelection = False
 
 
     # =================== Insertion ============
@@ -558,6 +736,36 @@ class TextEditor:
             self.text[self.line_num] = join_txt
         else:
             self.text[self.line_num] = self.text[self.line_num][:-1]
+    
+    def delete_selected_text(self):
+        start_col, start_row = self.mselection_start_row_n_col
+        start_row += self.mscroll_num
+        end_col, end_row = self.mselection_end_row_n_col
+        end_row += self.mscroll_num
+
+        if end_row > 0:
+            # self.text[start_row] = self.text[start_row][:start_col]
+            # self.text[end_row] = self.text[end_row][end_col + 1:]
+            # self.text = self.text[:start_row + 1] + self.text[end_row:]
+            pop_cnt = 0
+            # For deleting start row line
+            if start_col == 0 and start_row != 0:
+                self.text.pop(start_row)
+                pop_cnt += 1
+            else:
+                self.text[start_row] = self.text[start_row][:start_col]
+            # For deleting end row line
+            if end_col == len(self.text[end_row - pop_cnt]) - 1:
+                self.text.pop(end_row - pop_cnt)
+            else:
+                self.text[end_row - pop_cnt] = self.text[end_row - pop_cnt][end_col + 1:]
+            
+            # For deleting lines between (start_row, end_row) open interval
+            self.text = self.text[:start_row + 1 - pop_cnt] + self.text[end_row - pop_cnt:]
+
+            self.reset_selection()
+            return True
+        return False
     
     
 
@@ -642,17 +850,66 @@ class TextEditor:
     # Enable the syntax_highlighting
     def enable_syntax_highlighting(self, curr_ln):
         # syntax highlighting 
+        self.builtin_keyword_sh(curr_ln)
         self.function_sh(curr_ln)
         self.object_sh(curr_ln)
-        self.builtin_keyword_sh(curr_ln)
         self.syntax_hightlighting(curr_ln, "self", self.self_color) # specific for python 
         self.string_sh(curr_ln)
         self.escape_char_sh(curr_ln)
         self.comment_sh(curr_ln)
 
+    
 
+    # ======================== Mutant Mode ======================== #
+    def enableMutantMode(self):
+        self.get_row_n_col(self.cursor_surf_rect.topleft)
+        if self.cmd == "dd":
+            self.deleteSingleLine()
+        elif self.cmd.startswith("d"):
+            if len(self.cmd) > 1:
+                for _ in range(int(self.cmd[1:])):
+                    self.deleteSingleLine()
+        elif self.cmd.startswith("r"): # For replacing the charactere under the cursor
+            if len(self.cmd) > 1:
+                self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + self.cmd[1] + self.text[self.line_num][self.curr_col + 1:]
+                self.cmd = ""
+        elif self.cmd == "x":
+            if self.text[self.line_num] and self.text[self.line_num][self.curr_col]:
+                self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + self.text[self.line_num][self.curr_col + 1:]
+                self.prev_cmd = self.cmd
+                self.cmd = ""
+                if self.curr_col == len(self.text[self.line_num]):
+                    if self.curr_col >= 1:
+                        self.cursor_surf_rect.x = (len(self.text[self.line_num]) + self.space_after_ln - 1) * self.font_size[0] + self.space_after_ln
+        elif self.cmd == ".":
+            self.cmd = self.prev_cmd
+        else:
+            if self.cmd:
+                self.prev_cmd = self.cmd
+            self.cmd = ""
+
+        self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate 
+    
+    def deleteSingleLine(self):
+        if len(self.text) > 1:
+            if self.line_num + 1 < len(self.text):
+                self.cursor_surf_rect.x = len(self.text[self.line_num + 1]) * self.font_size[0] + self.offset + 4
+                self.text.pop(self.line_num)
+            else:
+                self.cursor_surf_rect.x = len(self.text[self.line_num - 1]) * self.font_size[0] + self.offset + 4
+                self.cursor_surf_rect.y -= self.font_size[1]
+                self.text.pop(self.line_num)
+                self.line_num -= 1
+            self.prev_cmd = self.cmd
+            self.cmd = ""
+    
+    # ======================== Mutant Mode ======================== #
+    
     # Draw 
     def draw(self):
+        # mode indicatior
+        self.te_display.fill(self.mode_color)
+
         # drawing surf
         self.te_display.blit(self.te_surf, self.te_pos)
         self.te_surf.fill(self.bg_color)
@@ -671,20 +928,37 @@ class TextEditor:
         # self.get_selection()
         if self.selected_col > 0:
             pygame.draw.rect(self.te_surf, self.selection_color, self.selection_rect)
+        
+        # display the mouse selection
+        if self.dispMouseSelection:
+            self.draw_mouse_selection()
+
+
+        # Display mode indicator
+        pygame.draw.rect(self.te_surf, self.mode_color, self.mode_indi_rect, border_radius=5)
+
+        
+        # Draw cursor
+        self.te_surf.blit(self.cursor_surf, self.cursor_surf_rect)
+
+        # enable mutantMode
+        if self.mutantMode:
+            self.enableMutantMode()
 
         
         # display the text
         # Adding Lazy loading
         # Want to add vscroll self.text_to_display = self.text[self.mscroll_num + self.vscroll:self.num_line_screen_can_display + self.mscroll_num + self.vscorll]
-        self.text_to_display = self.text[self.mscroll_num:self.num_line_screen_can_display + self.mscroll_num]
+        self.text_to_display = self.text[self.mscroll_num + self.vscroll_num:self.num_line_screen_can_display + self.mscroll_num + self.vscroll_num]
         for ln, text in enumerate(self.text_to_display):
             # Displaying the line numbers
-            self.scroll_y = ln + self.mscroll_num
+            self.scroll_y = ln + self.mscroll_num + self.vscroll_num
             ln_text = self.font.render(str(self.scroll_y + 1), 1, self.line_num_color)
             self.ln_txt_rect = ln_text.get_rect(topright = (self.line_num_w - (self.horizontal_scroll * self.hscroll_num), self.font_size[1] * (self.scroll_y + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)))
             if(self.scroll_y == self.line_num):
                 self.clis_rect.y = self.font_size[1] * (self.scroll_y + 1) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num)
                 self.te_surf.blit(self.curr_ln_indi_surf, self.clis_rect)
+
             self.te_surf.blit(ln_text, self.ln_txt_rect)
 
             # Displaying the code text
@@ -697,9 +971,6 @@ class TextEditor:
             # Enabling the Syntax Highlighting
             self.enable_syntax_highlighting(self.scroll_y)
         
-        
-        # Draw cursor
-        self.te_surf.blit(self.cursor_surf, self.cursor_surf_rect)
 
         # Draw FileManger 
         self.fileManager.draw(self.te_surf)

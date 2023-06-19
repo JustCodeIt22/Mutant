@@ -7,4 +7,4 @@ plugins = os.listdir(pwd + "\\data\\plugins")[:-2]
 for plugs in plugins:
     path = "data.plugins." + plugs
     globals()[path] = __import__(path)
-    print(plugs)
+    print(f"{plugs} is activated.")

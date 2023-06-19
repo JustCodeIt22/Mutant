@@ -5,12 +5,12 @@ from pygame.locals import *
 from ...algorithms import *
 
 class FileManager:
-    def __init__(self, bg_color, font, width, height, fg_color = (0, 0, 0)):
+    def __init__(self, bg_color, width, height, fg_color = (0, 0, 0)):
         self.bg_color = bg_color
         self.fg_color = fg_color
         self.font = pygame.font.Font("data/plugins/FileManager/data/font/robot_mono.ttf", 16)
         self.heading_font = pygame.font.Font("data/plugins/FileManager/data/font/retro_font.ttf", 24)
-        self.heading = self.heading_font.render("File Explorer".upper(), 1, (0, 0, 0))
+        self.heading = self.heading_font.render("File Explorer".upper(), 1, self.fg_color)
         self.isOpen = False
         
         self.dir_list = os.listdir(os.getcwd())
@@ -49,11 +49,7 @@ class FileManager:
 
     def reload(self):
         self.dir_list = os.listdir(os.getcwd())
-        # with open(os.getcwd().replace("\\","/") + "/data/plugins/FileManager/data/icons.json", "r") as file:
-        #     self.ics = json.load(file)
-        # self.ic_imgs = {}
-        # for k, v in self.ics.items():
-        #     self.ic_imgs[k] = pygame.image.load(v).convert_alpha()
+
 
     def draw_icon(self, surf, dirs, pos):
         file_name = dirs.split(".")
