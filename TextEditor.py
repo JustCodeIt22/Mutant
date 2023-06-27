@@ -4,7 +4,7 @@ import json
 import os  # for accessing the directories and files
 from data.algorithms import *
 from data.plugins.FileManager import FileManager
-
+from data.plugins.IntelliSense import IntelliSense
 
 # COLORS
 DEFAULT_BG_COLOR = (11, 14, 20)
@@ -147,6 +147,9 @@ class TextEditor:
         self.fileManager_width = cnv_to_per(30, self.te_size[0])
         self.fileManager = FileManager(self.fileManager_bgcolor, self.fileManager_width, self.te_size[1],  fg_color=self.fileManager_fgcolor)
 
+        # Intellisense
+        self.intellisense = IntelliSense()
+
         # Mutant Mode
         self.mutantMode = False
         self.cmd = ""
@@ -179,7 +182,6 @@ class TextEditor:
                 if self.win_is_open:
                     self.file_path = self.file_path[:-1]
                 elif self.selected_col > 0:
-                    print(self.selected_text)
                     self.text[self.line_num] = self.text[self.line_num][:self.curr_col]
                     self.reset_selection()
                 else:
@@ -259,7 +261,7 @@ class TextEditor:
                 # self.line_num = 0
                 # self.curr_col = 0
                 pass
-            elif self.fileManager.handle_events(event, self.ctrl): # Then dont add char to text
+            elif self.fileManager.handle_events(event, self.ctrl) or self.intellisense.handle_events(event, self.ctrl): # Then dont add char to text
                 pass
             elif self.ctrl and event.key == pygame.K_z: #  CTRL + z -> for undo
                 self.undo_func()
@@ -277,7 +279,6 @@ class TextEditor:
                 if isinstance(self.copied_text, str):
                     self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + self.copied_text + self.text[self.line_num][self.curr_col:]
                     self.cursor_surf_rect.x += len(self.copied_text) * self.font_size[0]
-                    print("hello")
                 # Pasting for multiple lines
                 elif isinstance(self.copied_text, list):
                     # pasting on the line having text
@@ -289,7 +290,6 @@ class TextEditor:
                         self.cursor_surf_rect.y += len(self.copied_text[1:]) * self.font_size[1]
                     # pasting on the line having no text 
                     else: 
-                        print("exectuted")
                         self.text.pop(self.line_num)
                         self.text[self.line_num:self.line_num] = self.copied_text
                         self.line_num += len(self.copied_text) - 1
@@ -632,8 +632,8 @@ class TextEditor:
 
         if (start_row >= 0 and end_row < len(self.text)):
             if start_row == end_row: # For same line selection
-                # self.mselected_text.append(self.text[start_row][start_col:end_col + 1])
-                self.selected_text = self.text[start_row][start_col:end_col + 1]
+                # self.selected_text = self.text[start_row][start_col:end_col + 1]
+                self.mselected_text = self.text[start_row][start_col:end_col + 1]
             if start_row < end_row: # For up to down selection
                 for i in range(start_row, end_row + 1):
                     if i == start_row: # For the start row
@@ -900,8 +900,12 @@ class TextEditor:
                 self.cursor_surf_rect.y -= self.font_size[1]
                 self.text.pop(self.line_num)
                 self.line_num -= 1
-            self.prev_cmd = self.cmd
-            self.cmd = ""
+        elif len(self.text) == 1:
+            print("working")
+            self.cursor_surf_rect.x = self.offset + self.space_after_ln
+            self.text[self.line_num] = ""
+        self.prev_cmd = self.cmd
+        self.cmd = ""
     
     # ======================== Mutant Mode ======================== #
     
@@ -972,8 +976,10 @@ class TextEditor:
             self.enable_syntax_highlighting(self.scroll_y)
         
 
-        # Draw FileManger 
+        # Draw Plugins
         self.fileManager.draw(self.te_surf)
+        self.intellisense.draw(self.te_surf, self.cursor_surf_rect.bottomright, self.text, self.line_num)
+
 
         # popup window for taking file path
         self.draw_popup_window()

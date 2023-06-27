@@ -1,1 +1,1 @@
-from .Intellisense import *
+from .IntelliSense import *
