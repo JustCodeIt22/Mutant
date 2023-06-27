@@ -8,8 +8,8 @@ class FileManager:
     def __init__(self, bg_color, width, height, fg_color = (0, 0, 0)):
         self.bg_color = bg_color
         self.fg_color = fg_color
-        self.font = pygame.font.Font("data/plugins/FileManager/data/font/robot_mono.ttf", 16)
-        self.heading_font = pygame.font.Font("data/plugins/FileManager/data/font/retro_font.ttf", 24)
+        self.font = pygame.font.Font("data/fonts/robot_mono.ttf", 16)
+        self.heading_font = pygame.font.Font("data/fonts/retro_font.ttf", 24)
         self.heading = self.heading_font.render("File Explorer".upper(), 1, self.fg_color)
         self.isOpen = False
         
@@ -40,7 +40,13 @@ class FileManager:
     def display_dirnames(self, surf):
         surf.blit(self.heading, (self.dirnames_x - 18, 10))
         for i, dirs in enumerate(self.dir_list):
-            dir_name = self.font.render(dirs, 1, self.fg_color)
+            # This is for the dirnames which are going out of the width of the file_manager then we just chipoff the excess and add "..." to the end
+            if len(dirs) > (self.width)/self.font.size("a")[0]:
+                chipoff = int(len(dirs) - (self.width - 10)/self.font.size("a")[0])
+                dir_name = self.font.render(dirs[:-(chipoff + 6)] + "...", 1, self.fg_color)
+            else:
+                dir_name = self.font.render(dirs, 1, self.fg_color)
+
             pos = (self.dirnames_x - 12,  (self.dirnames_margin * (i + 1)) + self.dirnames_top)
             if self.fm_rect.width >= self.width//2:
                 surf.blit(dir_name, (self.dirnames_x + 12, (self.dirnames_margin * (i + 1))+ self.dirnames_top))

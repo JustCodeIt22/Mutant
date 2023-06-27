@@ -3,8 +3,8 @@ from pygame.locals import *
 import json
 import os  # for accessing the directories and files
 from data.algorithms import *
-from data.plugins.FileManager import FileManager
-from data.plugins.IntelliSense import IntelliSense
+from data.plugins.FileManager import *
+from data.plugins.IntelliSense import *
 
 # COLORS
 DEFAULT_BG_COLOR = (11, 14, 20)
@@ -94,6 +94,9 @@ class TextEditor:
         self.selection_color = (64, 22, 187)
 
         # var for selection using mouse
+        self.mselection_color = (45, 83, 126)
+        self.mstart_indicator_color = (0, 255, 0)
+        self.mend_indicator_color = (255, 0, 0)
         self.mouseLeftBtnDown = False
         self.mselection_start_row_n_col = (0, 0)
         self.mselection_end_row_n_col = (0, 0)
@@ -187,27 +190,35 @@ class TextEditor:
                 else:
                     self.isBackspaceHold = True
                     if self.text[self.line_num] or self.text[self.line_num - 1] or self.text[self.line_num - 1] == "":
-                        if not self.delete_selected_text():
-                            if self.text[self.line_num] and self.curr_col != 0: # This is for char deletion
-                                self.cursor_surf_rect.x -= self.font_size[0]
-                                self.delete_text()
-                            else:
-                                if self.line_num > 0: # This is for the line deletion when the cursor is at the start of the line 
-                                    self.cursor_surf_rect.y = self.font_size[1] * (self.line_num - self.vscroll_num)
-                                    self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
-                                    self.text[self.line_num] = self.text[self.line_num - 1] + self.text[self.line_num] 
-                                    self.text.pop(self.line_num - 1)
-                                    self.line_num -= 1
-                                    if(self.cursor_surf_rect.topleft[1] <= self.font_size[1] and self.line_num > 0):
-                                        self.cursor_scroll = 0
-                                        self.vscroll_num -= 1
-                                    # self.scroll_window() # scroll window upwards if the cursor is at top of screen and if there are lines up
+                        if (self.mselection_start_row_n_col[1] < self.mselection_end_row_n_col[1]):
+                            self.delete_selected_text()
+                        elif self.text[self.line_num] and self.curr_col != 0: # This is for char deletion
+                            self.cursor_surf_rect.x -= self.font_size[0]
+                            self.delete_text()
+                        else:
+                            if self.line_num > 0: # This is for the line deletion when the cursor is at the start of the line 
+                                self.cursor_surf_rect.y = self.font_size[1] * (self.line_num - self.vscroll_num - self.mscroll_num)
+                                self.cursor_surf_rect.x = self.font.size(self.text[self.line_num - 1])[0] + self.cursor_posx
+                                self.text[self.line_num] = self.text[self.line_num - 1] + self.text[self.line_num] 
+                                self.text.pop(self.line_num - 1)
+                                self.line_num -= 1
+                                if(self.cursor_surf_rect.topleft[1] <= self.font_size[1] and self.line_num > 0):
+                                    self.cursor_scroll = 0
+                                    self.vscroll_num -= 1
+                                # self.scroll_window() # scroll window upwards if the cursor is at top of screen and if there are lines up
                         self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate col and row
                         self.undo_history = Stack()
 
             # Enter 
             elif event.key == pygame.K_RETURN:
-                if self.win_is_open:
+                if self.intellisense.haveSuggestions() and self.intellisense.dispAutoCompleteWindow:
+                    active_word = self.intellisense.complete()[len(self.intellisense.curr_word):]
+                    self.text[self.line_num] += active_word
+                    self.intellisense.active_idx = 0 # reseting the autocomplete index
+                    self.cursor_surf_rect.x += (len(active_word) * self.font_size[0])
+                    self.get_row_n_col(self.cursor_surf_rect.topleft)
+                    self.intellisense.dispAutoCompleteWindow = False
+                elif self.win_is_open:
                     if self.toSave : self.save_file()
                     elif self.toOpen : self.open_file()
                     self.win_is_open = False
@@ -301,7 +312,14 @@ class TextEditor:
 
             # Tab
             elif event.key == pygame.K_TAB:
-                if self.win_is_open:
+                if self.intellisense.haveSuggestions() and self.intellisense.dispAutoCompleteWindow:
+                    active_word = self.intellisense.complete()[len(self.intellisense.curr_word):]
+                    self.text[self.line_num] += active_word
+                    self.intellisense.active_idx = 0 # reseting the autocomplete index
+                    self.cursor_surf_rect.x += (len(active_word) * self.font_size[0])
+                    self.get_row_n_col(self.cursor_surf_rect.topleft)
+                    self.intellisense.dispAutoCompleteWindow = False
+                elif self.win_is_open:
                     self.tabAutoCompleteFileNames()
                 else:
                     self.cursor_surf_rect.x += self.font_size[0] * self.TAB_SIZE
@@ -328,19 +346,25 @@ class TextEditor:
                 self.insert_text()
             # Down Key
             elif event.key == pygame.K_DOWN:
-                self.update_cursor_according_to_keys(verticalDir = 1)
-                self.cursor_scroll = 1
-                self.scroll_window() # scroll window downwards if the cursor is at end of screen
-                self.insert_text()
+                if self.intellisense.haveSuggestions() and self.intellisense.dispAutoCompleteWindow:
+                    self.intellisense.update_active_index(1)
+                else:
+                    self.update_cursor_according_to_keys(verticalDir = 1)
+                    self.cursor_scroll = 1
+                    self.scroll_window() # scroll window downwards if the cursor is at end of screen
+                    self.insert_text()
             # Up Key
             elif event.key == pygame.K_UP:
-                self.update_cursor_according_to_keys(verticalDir = -1)
-                if(self.cursor_surf_rect.topleft[1] <= self.font_size[1] and self.line_num != 0):
-                    self.cursor_scroll = 0
-                    self.vscroll_num -= 1
-                    self.line_num -= 1 
-                self.scroll_window() # scroll window upwards if the cursor is at top of screen and if there are lines up
-                self.insert_text()
+                if self.intellisense.haveSuggestions() and self.intellisense.dispAutoCompleteWindow:
+                    self.intellisense.update_active_index(-1)
+                else:
+                    self.update_cursor_according_to_keys(verticalDir = -1)
+                    if(self.cursor_surf_rect.topleft[1] <= self.font_size[1] and self.line_num != 0):
+                        self.cursor_scroll = 0
+                        self.vscroll_num -= 1
+                        self.line_num -= 1 
+                    self.scroll_window() # scroll window upwards if the cursor is at top of screen and if there are lines up
+                    self.insert_text()
 
             # Other keys
             else:
@@ -352,6 +376,8 @@ class TextEditor:
                     self.cursor_surf_rect.x += self.font_size[0]
                     # insertion
                     self.insert_text(event.unicode)
+                    self.intellisense.dispAutoCompleteWindow = True
+                    self.intellisense.active_idx = 0
                 
         # Keyboard Keyup Events 
         if event.type == pygame.KEYUP:
@@ -692,11 +718,10 @@ class TextEditor:
                         width = len(self.text[i]) * self.font_size[0] + self.space_after_ln
                     height = self.font_size[1]
                     y = (height * (i + 1)) - (self.vertical_scroll * self.mscroll_num) - (self.vertical_scroll * self.vscroll_num) 
-                    pygame.draw.rect(self.te_surf, (45, 83, 126), ((x, y), (width, height)))
-                    # pygame.draw.rect(self.te_surf, (27, 58, 91), ((x, y), (width, height)))
+                    pygame.draw.rect(self.te_surf, self.mselection_color, ((x, y), (width, height)))
 
-                pygame.draw.rect(self.te_surf, (0, 255, 0), ((spx, spy), (w, h + 4))) # Start indicator
-                pygame.draw.rect(self.te_surf, (255, 0, 0), ((epx, epy), (w, h + 4))) # end indicator
+                pygame.draw.rect(self.te_surf, self.mstart_indicator_color, ((spx, spy), (w, h + 4))) # Start indicator
+                pygame.draw.rect(self.te_surf, self.mend_indicator_color, ((epx, epy), (w, h + 4))) # end indicator
 
     
     def reset_selection(self):
@@ -743,11 +768,16 @@ class TextEditor:
         end_col, end_row = self.mselection_end_row_n_col
         end_row += self.mscroll_num
 
-        if end_row > 0:
+        
+        if end_row > start_row:
             # self.text[start_row] = self.text[start_row][:start_col]
             # self.text[end_row] = self.text[end_row][end_col + 1:]
             # self.text = self.text[:start_row + 1] + self.text[end_row:]
             pop_cnt = 0
+            # For moving cursor 
+            if (end_row == len(self.text) - 1):
+                self.cursor_surf_rect.y -= self.font_size[1]
+
             # For deleting start row line
             if start_col == 0 and start_row != 0:
                 self.text.pop(start_row)
@@ -762,6 +792,8 @@ class TextEditor:
             
             # For deleting lines between (start_row, end_row) open interval
             self.text = self.text[:start_row + 1 - pop_cnt] + self.text[end_row - pop_cnt:]
+
+            
 
             self.reset_selection()
             return True
@@ -867,13 +899,22 @@ class TextEditor:
             self.deleteSingleLine()
         elif self.cmd.startswith("d"):
             if len(self.cmd) > 1:
-                for _ in range(int(self.cmd[1:])):
-                    self.deleteSingleLine()
+                if self.cmd[1] == "b": # for deleting from current line till bottom of the text file
+                    self.text = self.text[:self.line_num + 1]
+                elif self.cmd[1] == "t": # for deleting from current line till top of the text fil
+                    self.deleteTillTop()
+                else: # for deleting from current line till the given cmd_line
+                    if int(self.cmd[1]) < len(self.text):
+                        self.text = self.text[:self.line_num] + self.text[self.line_num + int(self.cmd[1]):]
+                    else:
+                        self.text = self.text[:self.line_num + 1]
+                self.cmd = ""
+                    
         elif self.cmd.startswith("r"): # For replacing the charactere under the cursor
             if len(self.cmd) > 1:
                 self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + self.cmd[1] + self.text[self.line_num][self.curr_col + 1:]
                 self.cmd = ""
-        elif self.cmd == "x":
+        elif self.cmd == "x": # for deleting the character under the cursor
             if self.text[self.line_num] and self.text[self.line_num][self.curr_col]:
                 self.text[self.line_num] = self.text[self.line_num][:self.curr_col] + self.text[self.line_num][self.curr_col + 1:]
                 self.prev_cmd = self.cmd
@@ -881,7 +922,7 @@ class TextEditor:
                 if self.curr_col == len(self.text[self.line_num]):
                     if self.curr_col >= 1:
                         self.cursor_surf_rect.x = (len(self.text[self.line_num]) + self.space_after_ln - 1) * self.font_size[0] + self.space_after_ln
-        elif self.cmd == ".":
+        elif self.cmd == ".": # for repeating the previous cmd
             self.cmd = self.prev_cmd
         else:
             if self.cmd:
@@ -890,6 +931,7 @@ class TextEditor:
 
         self.get_row_n_col(self.cursor_surf_rect.topleft) # recalculate 
     
+    # Delete Functions
     def deleteSingleLine(self):
         if len(self.text) > 1:
             if self.line_num + 1 < len(self.text):
@@ -906,6 +948,13 @@ class TextEditor:
             self.text[self.line_num] = ""
         self.prev_cmd = self.cmd
         self.cmd = ""
+
+    def deleteTillTop(self):
+        self.cursor_surf_rect.y -= len(self.text[:self.line_num]) * self.font_size[1]
+        temp = self.line_num
+        self.line_num -= len(self.text[:self.line_num])
+        self.text = self.text[temp:]
+
     
     # ======================== Mutant Mode ======================== #
     
@@ -978,8 +1027,7 @@ class TextEditor:
 
         # Draw Plugins
         self.fileManager.draw(self.te_surf)
-        self.intellisense.draw(self.te_surf, self.cursor_surf_rect.bottomright, self.text, self.line_num)
-
+        self.intellisense.draw(self.te_surf, self.cursor_surf_rect.bottomright, self.text, self.line_num, self.curr_col)
 
         # popup window for taking file path
         self.draw_popup_window()

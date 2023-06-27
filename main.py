@@ -1,5 +1,5 @@
 import pygame, sys
-from TextEditor import *
+from TextEditorv5 import *
 
 pygame.init()
 
@@ -11,7 +11,7 @@ pygame.display.set_icon(logo)
 
 clock = pygame.time.Clock()
 dispInfo = pygame.display.Info()
-SCREEN_WIDTH = 800 #dispInfo.current_w
+SCREEN_WIDTH = 800 #dispInfo.current_w 
 SCREEN_HEIGHT = 600 #dispInfo.current_h
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
 texteditor = TextEditor((0, 0), (SCREEN_WIDTH, SCREEN_HEIGHT))

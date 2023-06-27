@@ -3,6 +3,8 @@ def cnv_to_per(percent, of=100):
     result = percent/100 * of
     return result
 
+
+
 # Search all occurences of Substring in a string using (Z algorithm)
 def create_Zarr(string, z):
     size = len(string)
@@ -41,6 +43,8 @@ def findString(string, substr):
     
     return idxs
 
+# =====================================================================
+
 
 # Stack class
 class Stack:
@@ -62,3 +66,4 @@ class Stack:
 
     def top(self):
         return self.data[-1]
+
