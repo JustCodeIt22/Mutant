@@ -168,9 +168,13 @@ class TextEditor:
         # Drag and Drop files
         if event.type == pygame.DROPFILE:
             self.file_path = event.file
-            self.toOpen = True
-            if self.toOpen : self.open_file()
-            self.toOpen = False
+            try:
+                self.toOpen = True
+                if self.toOpen : self.open_file()
+                self.toOpen = False
+            except UnicodeDecodeError:
+                # TODO : display alert window saying ("File Not Supported !!") 
+                print("File Format Not Supported !!")
 
         # Keyboard events
         if event.type == pygame.KEYDOWN:
@@ -474,7 +478,7 @@ class TextEditor:
         if cursor_style == "filled_box":
             self.cursor_surf = pygame.Surface(self.font_size)
         elif cursor_style == "bar":
-            self.cursor_surf = pygame.Surface((4,self.font_size[1] + 2))
+            self.cursor_surf = pygame.Surface((4, self.font_size[1] + 2))
     
 
 
@@ -810,7 +814,7 @@ class TextEditor:
             self.te_surf.blit(f, (self.te_size[0]//2 - 200 + 36, self.te_size[1]//2 - 150//2 + 66))
 
 
-    # ============== Syntax Highlighting ==============
+    # ============== Syntax Highlighting ============== #
     def syntax_hightlighting(self, curr_ln, keyword, keyword_color):
         all_pos = findString(self.text[curr_ln], keyword)
         for pos in all_pos:
